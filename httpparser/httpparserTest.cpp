@@ -16,6 +16,8 @@ string buildStrFromCharVec(const vector<char>& v) {
 
 class HTTPParserTest : public HTTPParser {
 public:
+	void parseMessageBody() override { }
+
 	void testGetCRLFLine() {
 		static const string TAG = "testGetCRLFLine";
 		bool failFlag = false;

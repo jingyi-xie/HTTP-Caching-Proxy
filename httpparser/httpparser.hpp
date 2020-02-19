@@ -6,6 +6,7 @@
 #include <vector>
 #include <cctype>
 #include <sstream>
+#include <stdexcept>
 
 #include "../log.hpp"
 
@@ -84,6 +85,92 @@ OWS = *( SP / HTAB )
 (https://stackoverflow.com/questions/31237198/is-it-possible-to-include-multiple-crlfs-in-a-http-header-field),
 and will cause an HTTP 400 (bad request) error
 
+
+
+3.3.  Message Body (https://tools.ietf.org/html/rfc7230#section-3.3)
+
+3.3.3.  Message Body Length
+
+   The length of a message body is determined by one of the following
+   (in order of precedence):
+
+   1.  ... and any response with a 1xx
+       (Informational), 204 (No Content), or 304 (Not Modified) status
+       code is always terminated by the first empty line after the
+       header fields, regardless of the header fields present in the
+       message, and thus cannot contain a message body.
+
+   2.  Any 2xx (Successful) response to a CONNECT request implies that
+       the connection will become a tunnel immediately after the empty
+       line that concludes the header fields.  A client MUST ignore any
+       Content-Length or Transfer-Encoding header fields received in
+       such a message.
+
+   3.  If a Transfer-Encoding header field is present and the chunked
+       transfer coding (Section 4.1) is the final encoding, the message
+       body length is determined by reading and decoding the chunked
+       data until the transfer coding indicates the data is complete.
+
+       If a Transfer-Encoding header field is present in a response and
+       the chunked transfer coding is not the final encoding, the
+       message body length is determined by reading the connection until
+       it is closed by the server.  If a Transfer-Encoding header field
+       is present in a request and the chunked transfer coding is not
+       the final encoding, the message body length cannot be determined
+       reliably; the server MUST respond with the 400 (Bad Request)
+       status code and then close the connection.
+
+       If a message is received with both a Transfer-Encoding and a
+       Content-Length header field, the Transfer-Encoding overrides the
+       Content-Length.  Such a message might indicate an attempt to
+       perform request smuggling (Section 9.5) or response splitting
+       (Section 9.4) and ought to be handled as an error.  A sender MUST
+       remove the received Content-Length field prior to forwarding such
+       a message downstream.
+
+   4.  If a message is received without Transfer-Encoding and with
+       either multiple Content-Length header fields having differing
+       field-values or a single Content-Length header field having an
+       invalid value, then the message framing is invalid and the
+       recipient MUST treat it as an unrecoverable error.  If this is a
+       request message, the server MUST respond with a 400 (Bad Request)
+       status code and then close the connection.  If this is a response
+       message received by a proxy, the proxy MUST close the connection
+       to the server, discard the received response, and send a 502 (Bad
+       Gateway) response to the client.  If this is a response message
+       received by a user agent, the user agent MUST close the
+       connection to the server and discard the received response.
+
+   5.  If a valid Content-Length header field is present without
+       Transfer-Encoding, its decimal value defines the expected message
+       body length in octets.  If the sender closes the connection or
+       the recipient times out before the indicated number of octets are
+       received, the recipient MUST consider the message to be
+       incomplete and close the connection.
+
+   6.  If this is a request message and none of the above are true, then
+       the message body length is zero (no message body is present).
+
+   7.  Otherwise, this is a response message without a declared message
+       body length, so the message body length is determined by the
+       number of octets received prior to the server closing the
+       connection.
+
+*/
+
+
+
+/*
+ * Error Handling
+ * // TODO: change exception types, begin with rule 3 at request parser https://tools.ietf.org/html/rfc7230#section-3.3.3
+ * // TODO: start with getCRLFLine()
+ *
+ *
+ * 1. HTTPParserException: [RETRY LATER]
+ *
+ * 2. HTTP400Exception: [ERROR]
+ *
+ * 3. StatusNotCompleteException: [RETRY LATER]
 */
 
 namespace zq29 {
@@ -91,13 +178,22 @@ namespace zq29Inner {
 
 	bool isDigit(char c);
 
+
+
 	class HTTPMessage {
-	public:
-		
-
 	protected:
+		/*
+		 * some header fields may have the same filed name
+		 * but different value, so use set<pair<>>
+		*/
+		set<pair<string, string>> headerFields;
 
+		string messageBody;
+	public:
+		HTTPMessage(const set<pair<string, string>>& h, const string& m);
 	};
+
+
 
 	class HTTPRequest : public HTTPMessage {
 	public:
@@ -106,9 +202,14 @@ namespace zq29Inner {
 			string requestTarget;
 			string httpVersion;
 		};
+
+		HTTPRequest(const RequestLine& r, 
+			const set<pair<string, string>>& h, const string& m);
 	private:
 		RequestLine requestLine;
 	};
+
+
 
 	class HTTPStatus : public HTTPMessage {
 	public:
@@ -117,6 +218,9 @@ namespace zq29Inner {
 			string statusCode;
 			string reasonPhrase;
 		};
+
+		HTTPStatus(const StatusLine& s, 
+			const set<pair<string, string>>& h, const string& m);
 	private:
 		StatusLine statusLine;
 	};
@@ -147,6 +251,11 @@ namespace zq29Inner {
 		 * but different value, so use set<pair<>>
 		*/
 		set<pair<string, string>> headerFields;
+		// return headerFields.end() if not found
+		set<pair<string, string>>::iterator getHeaderFieldByName(const string& name);
+		set<pair<string, string>>::iterator getHeaderFieldByName(const string& name) const;
+
+		string messageBody;
 
 		void __checkLeadingSpaces(stringstream& ss);
 		void __checkSkipOneSP(stringstream& ss);
@@ -156,25 +265,18 @@ namespace zq29Inner {
 		 * extract (return and erase from the buffer) a line that
 		 * ends with "CR LF" from the buffer
 		 * returns a string WITHOUT "CR LF" at the end
-		 * if the buffer contains no "CR LF", throw a CRLFException
-		 * if only CR or only LF is found rather than CR LF,
-		 * throw a CRLFException
+		 * if the buffer contains no "CR LF", throw an HTTPParserException
+		 * if a single CR is found at then end of the buffer, throw an HTTPParserException
+		 * if single CR or LF is found else where, throw an HTTP400Exception
 		*/
 		string getCRLFLine();
-		class CRLFException {
-		private:
-			const char* msg;
-		public:
-			CRLFException(const char* msg = "");
-			const char* what() const;
-		};
 
-		class HTTPParserException {
+		class HTTPParserException : public exception {
 		private:
 			const char* msg;
 		public:
 			HTTPParserException(const char* msg = "");
-			const char* what() const;
+			const char* what() const throw() override;
 		};
 
 		/*
@@ -183,6 +285,21 @@ namespace zq29Inner {
 		 * will parse the end of header (CR LF) as well
 		*/
 		void parseHeaderFields();
+
+		/*
+		 * a helper function to parse message body
+		 * when the final encoding of header field
+		 * "Transfer-Encoding" is "chunked"
+		*/
+		void parseChunkedMessageBody();
+		/*
+		 * this function first determins the length of the message body
+		 * and then extract and fill the message body with it, with NO check
+		 * so it MUST be carefully called after parseHeaderFields
+		 *
+		 * its implementation depends on HTTP message type
+		*/
+		virtual void parseMessageBody() = 0;
 
 	public:
 		/*
@@ -194,6 +311,8 @@ namespace zq29Inner {
 		virtual void clear();
 	};
 
+
+
 	/*
 	 * For HTTP request
 	*/
@@ -203,18 +322,76 @@ namespace zq29Inner {
 		HTTPRequest::RequestLine requestLine;
 
 		void parseRequestLine();
+
+		void parseMessageBody() override;
+
+	public:
+		class HTTP400Exception : public exception {
+		private:
+			const char* msg;
+		public:
+			HTTP400Exception(const char* msg = "");
+			const char* what() const throw() override;
+		};
+
+		virtual void clear() override;
+		/*
+		 * return an HTTPRequest object that is
+		 * built from the buffer, which means,
+		 * setBuffer should be called before this method
+		 * 
+		 * you can call getBuffer to get what's left in the buffer
+		 *
+		 * on failure, throw exceptions
+		*/
+		HTTPRequest build();
 	};
 
 
+
 	/*
-	 * 
+	 * For HTTP status
 	*/
 	class HTTPStatusParser : public HTTPParser {
 	protected: // for testing purpose
 		
 		HTTPStatus::StatusLine statusLine;
 
+		// see section 3.3.3 rule 2
+		bool isRespToCONNECT;
+		void setRespToCONNECT(bool b);
+
+		// see srction 3.3.3 rule 3
+		bool isStatusComplete;
+		void setStatusComplete(bool b);
+
 		void parseStatusLine();
+
+		void parseMessageBody() override;
+
+	public:
+		HTTPStatusParser();
+
+		class StatusNotCompleteException : public exception {
+		private:
+			const char* msg;
+		public:
+			StatusNotCompleteException(const char* msg = "");
+			const char* what() const throw() override;
+		};
+
+		virtual void clear() override;
+
+		/*
+		 * return an HTTPStatus object that is
+		 * built from the buffer, which means,
+		 * setBuffer should be called before this method
+		 * 
+		 * you can call getBuffer to get what's left in the buffer
+		 *
+		 * on failure, throw exceptions
+		*/
+		HTTPStatus build();
 	};
 
 
@@ -232,20 +409,25 @@ namespace zq29Inner {
 	/////////////////////////////////////////////////////////////////////////////////
 	//////////////////////////// HTTPMessage Implementation /////////////////////////
 	/////////////////////////////////////////////////////////////////////////////////
-
+	HTTPMessage::HTTPMessage(const set<pair<string, string>>& h, const string& m) : 
+		headerFields(h), messageBody(m) {}
 
 
 
 	/////////////////////////////////////////////////////////////////////////////////
 	//////////////////////////// HTTPRequest Implementation /////////////////////////
 	/////////////////////////////////////////////////////////////////////////////////
-
+	HTTPRequest::HTTPRequest(const RequestLine& r, 
+		const set<pair<string, string>>& h, const string& m) :
+		HTTPMessage(h, m), requestLine(r) {}
 
 
 	/////////////////////////////////////////////////////////////////////////////////
 	//////////////////////////// HTTPStatus Implementation //////////////////////////
 	/////////////////////////////////////////////////////////////////////////////////
-
+	HTTPStatus::HTTPStatus(const StatusLine& s, 
+		const set<pair<string, string>>& h, const string& m) :
+		HTTPMessage(h, m), statusLine(s) {}
 
 
 
@@ -257,6 +439,24 @@ namespace zq29Inner {
 	/////////////////////////////////////////////////////////////////////////////////
 	//////////////////////////// HTTPParser Implementation //////////////////////////
 	/////////////////////////////////////////////////////////////////////////////////
+	// return headerFields.end() if not found
+	set<pair<string, string>>::iterator HTTPParser::getHeaderFieldByName(const string& name) {
+		for(auto e = headerFields.begin(); e != headerFields.end(); e++) {
+			if((*e).first == name) {
+				return e;
+			}
+		}
+		return headerFields.end();
+	}
+	set<pair<string, string>>::iterator HTTPParser::getHeaderFieldByName(const string& name) const {
+		for(auto e = headerFields.begin(); e != headerFields.end(); e++) {
+			if((*e).first == name) {
+				return e;
+			}
+		}
+		return headerFields.end();
+	}
+
 	void HTTPParser::__checkLeadingSpaces(stringstream& ss) {
 		// check leading spaces
 		if(isspace(ss.peek())) {
@@ -287,16 +487,10 @@ namespace zq29Inner {
 		}
 	}
 
-	HTTPParser::CRLFException::CRLFException(const char* msg) {
-		this->msg = msg;
-	} 
-	const char* HTTPParser::CRLFException::what() const {
-		return msg;
-	}
 	HTTPParser::HTTPParserException::HTTPParserException(const char* msg) {
 		this->msg = msg;
 	} 
-	const char* HTTPParser::HTTPParserException::what() const {
+	const char* HTTPParser::HTTPParserException::what() const throw() {
 		return msg;
 	}
 
@@ -330,6 +524,10 @@ namespace zq29Inner {
 		}
 		
 		throw CRLFException("No 'CR LF' found in buffer");
+	}
+
+	void HTTPParser::parseChunkedMessageBody() {
+		// TODO: see 4.1.3
 	}
 
 	void HTTPParser::setBuffer(const vector<char>& buffer) {
@@ -391,6 +589,7 @@ namespace zq29Inner {
 	void HTTPParser::clear() {
 		buffer.clear();
 		headerFields.clear();
+		messageBody = "";
 	}
 
 
@@ -448,6 +647,42 @@ namespace zq29Inner {
 		__checkEndl(ss);
 	}
 
+	void HTTPRequestParser::parseMessageBody() {
+		// rule 3
+		// Transfer-Encoding = 1#transfer-coding
+		auto const transferEncodingfield = getHeaderFieldByName("Transfer-Encoding");
+		if(transferEncodingfield != headerFields.end()) {
+			string finalEncoding;
+			stringstream ss;
+			ss << (*transferEncodingfield).second;
+			while(ss >> finalEncoding) {}
+			if(finalEncoding == "chunked") {
+				parseChunkedMessageBody();
+				return;
+			} else {
+				
+			}
+		}
+	}
+
+	HTTPRequestParser::HTTP400Exception::HTTP400Exception(const char* msg) {
+		this->msg = msg;
+	} 
+	const char* HTTPRequestParser::HTTP400Exception::what() const throw() {
+		return msg;
+	}
+
+	void HTTPRequestParser::clear() {
+		requestLine = HTTPRequest::RequestLine();
+	}
+
+	HTTPRequest HTTPRequestParser::build() {
+		parseRequestLine();
+		parseHeaderFields(); // from parent class
+		parseMessageBody(); // from parent class
+		return HTTPRequest(requestLine, headerFields, messageBody);
+	}
+
 
 
 
@@ -456,6 +691,19 @@ namespace zq29Inner {
 	/////////////////////////////////////////////////////////////////////////////////
 	//////////////////////////// HTTPStatusParser Implementation ////////////////////
 	/////////////////////////////////////////////////////////////////////////////////
+	HTTPStatusParser::HTTPStatusParser() : 
+		isRespToCONNECT(false),
+		isStatusComplete(false)
+		{}
+
+	void HTTPStatusParser::setRespToCONNECT(bool b) {
+		isRespToCONNECT = b;
+	}
+
+	void HTTPStatusParser::setStatusComplete(bool b) {
+		isStatusComplete = b;
+	}
+
 	void HTTPStatusParser::parseStatusLine() {
 		string line = getCRLFLine();
 		if(line == "") {
@@ -492,6 +740,63 @@ namespace zq29Inner {
 		getline(ss, statusLine.reasonPhrase);
 
 		__checkEndl(ss);
+	}
+
+	void HTTPStatusParser::parseMessageBody() {
+		// rule 1
+		if(statusLine.statusCode[0] == '1' || statusLine.statusCode == "204" ||
+				statusLine.statusCode == "304") {
+			messageBody = "";
+			return;
+		}
+		// rule 2
+		if(isRespToCONNECT && statusLine.statusCode[0] == '2') {
+			messageBody = "";
+			return;
+		}
+		// rule 3
+		// Transfer-Encoding = 1#transfer-coding
+		auto const transferEncodingfield = getHeaderFieldByName("Transfer-Encoding");
+		if(transferEncodingfield != headerFields.end()) {
+			string finalEncoding;
+			stringstream ss;
+			ss << (*transferEncodingfield).second;
+			while(ss >> finalEncoding) {}
+			if(finalEncoding == "chunked") {
+				parseChunkedMessageBody();
+				return;
+			} else {
+				if(!isStatusComplete) {
+					throw StatusNotCompleteException(
+						"while Transfer-Encoding does NOT have 'chunked',\
+						data should be read until connection is closed");
+				} else {
+					messageBody = string(buffer.begin(), buffer.end());
+					buffer.clear();
+					return;
+				}
+			}
+		}
+	}
+
+	HTTPStatusParser::StatusNotCompleteException::StatusNotCompleteException(const char* msg) {
+		this->msg = msg;
+	}
+	const char* HTTPStatusParser::StatusNotCompleteException::what() const throw() {
+		return msg;
+	}
+
+	void HTTPStatusParser::clear() {
+		statusLine = HTTPStatus::StatusLine();
+		isRespToCONNECT = false;
+		isStatusComplete = false;
+	}
+
+	HTTPStatus HTTPStatusParser::build() {
+		parseStatusLine();
+		parseHeaderFields(); // from parent class
+		parseMessageBody(); // from parent class
+		return HTTPStatus(statusLine, headerFields, messageBody);
 	}
 
 
