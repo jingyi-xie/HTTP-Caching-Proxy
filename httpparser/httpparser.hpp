@@ -162,15 +162,21 @@ and will cause an HTTP 400 (bad request) error
 
 /*
  * Error Handling
- * // TODO: change exception types, begin with rule 3 at request parser https://tools.ietf.org/html/rfc7230#section-3.3.3
- * // TODO: start with getCRLFLine()
  *
+ * [RETRY LATER]: this indicates the content in a buffer seems to be an incomplete HTTP message
+ * 		so please retry parsing later after receiving more data to the buffer
+ *
+ * [ERROR]: this indicates the content has random message or HTTP message that does NOT obey standards
  *
  * 1. HTTPParserException: [RETRY LATER]
  *
- * 2. HTTP400Exception: [ERROR]
+ * 2. HTTPBadMessageException: [ERROR]
  *
- * 3. StatusNotCompleteException: [RETRY LATER]
+ * 2. HTTP400Exception : public HTTPBadMessageException: [ERROR]
+ *
+ * 3. HTTPBadStatusException : public HTTPBadMessageException : [ERROR]
+ *
+ * 4. StatusNotCompleteException: [RETRY LATER]
 */
 
 namespace zq29 {
@@ -251,9 +257,13 @@ namespace zq29Inner {
 		 * but different value, so use set<pair<>>
 		*/
 		set<pair<string, string>> headerFields;
-		// return headerFields.end() if not found
+		// return headerFields.end() if not found, throw HTTPBadMessageException when multi iters are found
 		set<pair<string, string>>::iterator getHeaderFieldByName(const string& name);
 		set<pair<string, string>>::iterator getHeaderFieldByName(const string& name) const;
+		// count how many header fields are there with "name" as a key
+		size_t countHeaderFieldByName(const string& name) const;
+		// erase all header fields with key "name", or do nothing if none exists
+		void eraseHeaerFieldByName(const string& name);
 
 		string messageBody;
 
@@ -270,6 +280,14 @@ namespace zq29Inner {
 		 * if single CR or LF is found else where, throw an HTTP400Exception
 		*/
 		string getCRLFLine();
+
+		class HTTPBadMessageException : public exception {
+		private:
+			const char* msg;
+		public:
+			HTTPBadMessageException(const char* msg = "");
+			const char* what() const throw() override;
+		};
 
 		class HTTPParserException : public exception {
 		private:
@@ -326,12 +344,9 @@ namespace zq29Inner {
 		void parseMessageBody() override;
 
 	public:
-		class HTTP400Exception : public exception {
-		private:
-			const char* msg;
+		class HTTP400Exception : public HTTPBadMessageException {
 		public:
-			HTTP400Exception(const char* msg = "");
-			const char* what() const throw() override;
+			HTTP400Exception(const char* msg);
 		};
 
 		virtual void clear() override;
@@ -351,6 +366,16 @@ namespace zq29Inner {
 
 	/*
 	 * For HTTP status
+	 *
+	 * !!!*** IMPORTANT ***!!!
+	 * 
+	 * The following cases will throw StatusNotCompleteException
+	 * To handle this exception, read until connection is closed,
+	 * put everything in buffer AND CALL METHOD setStatusComplete(true)
+	 * THEN redo the parsing, you'll be fine
+	 *
+	 * 1. Transfer-Encoding (if exists) does NOT have 'chunked'
+	 * 2. rule 7 in sections 3.3.3, which means all rules from 1-6 are not satisfied
 	*/
 	class HTTPStatusParser : public HTTPParser {
 	protected: // for testing purpose
@@ -371,6 +396,11 @@ namespace zq29Inner {
 
 	public:
 		HTTPStatusParser();
+
+		class HTTPBadStatusException : public HTTPBadMessageException {
+		public:
+			HTTPBadStatusException(const char* msg);
+		};
 
 		class StatusNotCompleteException : public exception {
 		private:
@@ -441,49 +471,79 @@ namespace zq29Inner {
 	/////////////////////////////////////////////////////////////////////////////////
 	// return headerFields.end() if not found
 	set<pair<string, string>>::iterator HTTPParser::getHeaderFieldByName(const string& name) {
+		auto res = headerFields.end();
 		for(auto e = headerFields.begin(); e != headerFields.end(); e++) {
 			if((*e).first == name) {
-				return e;
+				if(res != headerFields.end()) {
+					throw HTTPBadMessageException(Log::msg(
+						"multiple header fields with name <", name, ">",
+						"were found while calling getHeaderFieldByName"
+					).c_str());
+				}
+				res = e;
 			}
 		}
-		return headerFields.end();
+		return res;
 	}
 	set<pair<string, string>>::iterator HTTPParser::getHeaderFieldByName(const string& name) const {
+		auto res = headerFields.end();
 		for(auto e = headerFields.begin(); e != headerFields.end(); e++) {
 			if((*e).first == name) {
-				return e;
+				if(res != headerFields.end()) {
+					throw HTTPBadMessageException(Log::msg(
+						"multiple header fields with name <", name, ">",
+						"were found while calling getHeaderFieldByName"
+					).c_str());
+				}
+				res = e;
 			}
 		}
-		return headerFields.end();
+		return res;
+	}
+	size_t HTTPParser::countHeaderFieldByName(const string& name) const {
+		size_t count = 0;
+		for(auto const& e : headerFields) {
+			if(e.first == name) {
+				count++;
+			}
+		}
+		return count;
+	}
+	void HTTPParser::eraseHeaerFieldByName(const string& name) {
+		for(auto e = headerFields.begin(); e != headerFields.end(); e++) {
+			if((*e).first == name) {
+				headerFields.erase(e);
+			}
+		}
 	}
 
 	void HTTPParser::__checkLeadingSpaces(stringstream& ss) {
 		// check leading spaces
 		if(isspace(ss.peek())) {
-			throw HTTPParserException("while parsing an HTTP message, line begins with spaces");
+			throw HTTPBadMessageException("while parsing an HTTP message, line begins with spaces");
 		}
 	}
 
 	void HTTPParser::__checkSkipOneSP(stringstream& ss) {
 		if(ss.peek() != ' ') {
-			throw HTTPParserException(Log::msg(
+			throw HTTPBadMessageException(Log::msg(
 				"while parsing an HTTP message, expected space(SP), got <", ss.peek(), ">").c_str());	
 		}
 		ss.ignore();
 		if(isspace(ss.peek())) {
-			throw HTTPParserException("while parsing an HTTP message, got unexpected space char");
+			throw HTTPBadMessageException("while parsing an HTTP message, got unexpected space char");
 		}
 	}
 
 	void HTTPParser::__checkEndl(stringstream& ss) {
 		// check ending spaces
 		if(isspace(ss.peek())) {
-			throw HTTPParserException("while parsing an HTTP message, line ends with spaces");
+			throw HTTPBadMessageException("while parsing an HTTP message, line ends with spaces");
 		}
 
 		// check if there is more content
 		if(ss) {
-			throw HTTPParserException("while parsing an HTTP message, too much content at the end of the line");
+			throw HTTPBadMessageException("while parsing an HTTP message, too much content at the end of the line");
 		}
 	}
 
@@ -493,18 +553,30 @@ namespace zq29Inner {
 	const char* HTTPParser::HTTPParserException::what() const throw() {
 		return msg;
 	}
+	HTTPParser::HTTPBadMessageException::HTTPBadMessageException(const char* msg) {
+		this->msg = msg;
+	} 
+	const char* HTTPParser::HTTPBadMessageException::what() const throw() {
+		return msg;
+	}
 
 	string HTTPParser::getCRLFLine() {
 		if(buffer.size() == 0) {
-			throw CRLFException("buffer was empty, nothing to get");
+			throw HTTPParserException("buffer was empty, nothing to get");
 		}
 
 		for(size_t i = 0; i < buffer.size(); i++) {
 			if(buffer[i] == '\r') {
 
-				// i is the last char, or the next char is not '\n'
-				if(i == buffer.size() - 1 || buffer[i + 1] != '\n') {
-					throw CRLFException(Log::msg("'\r' was found while parsing <", 
+				// i is the last char
+				if(i == buffer.size() - 1) {
+					throw HTTPParserException(Log::msg("'\r' was found while parsing <", 
+						string(buffer.begin(), buffer.end()), ">").c_str());
+				}
+
+				// the next char is not '\n'
+				if(buffer[i + 1] != '\n') {
+					throw HTTPBadMessageException(Log::msg("'\r' was found while parsing <", 
 						string(buffer.begin(), buffer.end()), ">").c_str());
 				}
 
@@ -518,12 +590,12 @@ namespace zq29Inner {
 					return line;
 				}
 			} else if(buffer[i] == '\n') {
-				throw CRLFException(Log::msg("'\n' was found while parsing <", 
+				throw HTTPBadMessageException(Log::msg("'\n' was found while parsing <", 
 					string(buffer.begin(), buffer.end()), ">").c_str());
 			}
 		}
 		
-		throw CRLFException("No 'CR LF' found in buffer");
+		throw HTTPParserException("No 'CR LF' found in buffer");
 	}
 
 	void HTTPParser::parseChunkedMessageBody() {
@@ -556,14 +628,14 @@ namespace zq29Inner {
 				}
 			}
 			if(colIndex == line.size()) {
-				throw HTTPParserException(Log::msg("illegal header-field line <", line, ">").c_str());
+				throw HTTPBadMessageException(Log::msg("illegal header-field line <", line, ">").c_str());
 			}
 
 			// get field name
 			string name(line.begin(), line.begin() + colIndex);
 			for(char c : name) {
 				if(isspace(c)) {
-					throw HTTPParserException("No space allowed in filed name or between filed name and ':'");
+					throw HTTPBadMessageException("No space allowed in filed name or between filed name and ':'");
 				}
 			}
 
@@ -606,7 +678,7 @@ namespace zq29Inner {
 	void HTTPRequestParser::parseRequestLine() {
 		string line = getCRLFLine();
 		if(line == "") {
-			throw HTTPParserException("request line is empty");
+			throw HTTP400Exception("request line is empty");
 		}
 
 		stringstream ss;
@@ -619,7 +691,7 @@ namespace zq29Inner {
 		static const set<string> METHODS = { "GET", "POST", "CONNECT" };
 		ss >> temp;
 		if(METHODS.find(temp) == METHODS.end()) {
-			throw HTTPParserException("request method not recognized");
+			throw HTTP400Exception("request method not recognized");
 		}
 		requestLine.method = temp;
 
@@ -635,12 +707,12 @@ namespace zq29Inner {
 
 		// get HTTP version
 		if(!ss) {
-			throw HTTPParserException("request line incomplete");
+			throw HTTP400Exception("request line incomplete");
 		}
 		ss >> temp;
 		if(temp.length() != 8 || temp.substr(0, 5) != "HTTP/" || 
 			temp[6] != '.' || !isDigit(temp[5]) || !isDigit(temp[7])) {
-			throw HTTPParserException("request HTTP version not recognized");
+			throw HTTP400Exception("request HTTP version not recognized");
 		}
 		requestLine.httpVersion = temp;
 
@@ -652,6 +724,8 @@ namespace zq29Inner {
 		// Transfer-Encoding = 1#transfer-coding
 		auto const transferEncodingfield = getHeaderFieldByName("Transfer-Encoding");
 		if(transferEncodingfield != headerFields.end()) {
+			eraseHeaerFieldByName("Content-Length");
+
 			string finalEncoding;
 			stringstream ss;
 			ss << (*transferEncodingfield).second;
@@ -660,17 +734,43 @@ namespace zq29Inner {
 				parseChunkedMessageBody();
 				return;
 			} else {
-				
+				throw HTTP400Exception("final encoding is NOT chunked for \
+					'Transfer-Encoding' for request, close connection");
 			}
 		}
+		// rule 4 & 5
+		size_t contentLengthCount = countHeaderFieldByName("Content-Length");
+		if(contentLengthCount > 1) {
+			throw HTTP400Exception("status contains multiple Content-Length fields");
+		} else if(contentLengthCount == 1) {
+			// check if length is valid
+			stringstream ss;
+			const string contentLengthStr = (*getHeaderFieldByName("Content-Length")).second;
+			ss << contentLengthStr;
+			int contentLength;
+			string fool;
+			ss >> contentLength;
+			if(ss >> fool || contentLength < 0) {
+				throw HTTP400Exception(Log::msg(
+					"invalid Content-Length field <", contentLengthStr, ">"
+				).c_str());
+			}
+			// rule 5
+			if(size_t(contentLength) > buffer.size()) {
+				throw HTTPParserException(Log::msg(
+					"while parsing message body, expected length <", contentLength,
+					">, got length <", buffer.size(), "> in buffer"
+				).c_str());
+			}
+			messageBody = string(buffer.begin(), buffer.begin() + contentLength);
+			buffer.erase(buffer.begin(), buffer.begin() + contentLength);
+		}
+		// rule 6
+		messageBody = "";
 	}
 
-	HTTPRequestParser::HTTP400Exception::HTTP400Exception(const char* msg) {
-		this->msg = msg;
-	} 
-	const char* HTTPRequestParser::HTTP400Exception::what() const throw() {
-		return msg;
-	}
+	HTTPRequestParser::HTTP400Exception::HTTP400Exception(const char* msg) :
+		HTTPBadMessageException(msg) {}
 
 	void HTTPRequestParser::clear() {
 		requestLine = HTTPRequest::RequestLine();
@@ -707,7 +807,7 @@ namespace zq29Inner {
 	void HTTPStatusParser::parseStatusLine() {
 		string line = getCRLFLine();
 		if(line == "") {
-			throw HTTPParserException("status line is empty");
+			throw HTTPBadStatusException("status line is empty");
 		}
 
 		stringstream ss;
@@ -720,7 +820,7 @@ namespace zq29Inner {
 		ss >> temp;
 		if(temp.length() != 8 || temp.substr(0, 5) != "HTTP/" || 
 			temp[6] != '.' || !isDigit(temp[5]) || !isDigit(temp[7])) {
-			throw HTTPParserException("status line: HTTP version not recognized");
+			throw HTTPBadStatusException("status line: HTTP version not recognized");
 		}
 		statusLine.httpVersion = temp;
 
@@ -730,7 +830,7 @@ namespace zq29Inner {
 		ss >> temp;
 		if(temp.length() != 3 || !isDigit(temp[0]) || 
 			!isDigit(temp[1]) || !isDigit(temp[2])) {
-			throw HTTPParserException("status line: status code not recognized");
+			throw HTTPBadStatusException("status line: status code not recognized");
 		}
 		statusLine.statusCode = temp;
 
@@ -758,6 +858,8 @@ namespace zq29Inner {
 		// Transfer-Encoding = 1#transfer-coding
 		auto const transferEncodingfield = getHeaderFieldByName("Transfer-Encoding");
 		if(transferEncodingfield != headerFields.end()) {
+			eraseHeaerFieldByName("Content-Length");
+
 			string finalEncoding;
 			stringstream ss;
 			ss << (*transferEncodingfield).second;
@@ -777,7 +879,45 @@ namespace zq29Inner {
 				}
 			}
 		}
+		// rule 4 & 5
+		size_t contentLengthCount = countHeaderFieldByName("Content-Length");
+		if(contentLengthCount > 1) {
+			throw HTTPBadStatusException("status contains multiple Content-Length fields");
+		} else if(contentLengthCount == 1) {
+			// check if length is valid
+			stringstream ss;
+			const string contentLengthStr = (*getHeaderFieldByName("Content-Length")).second;
+			ss << contentLengthStr;
+			int contentLength;
+			string fool;
+			ss >> contentLength;
+			if(ss >> fool || contentLength < 0) {
+				throw HTTPBadStatusException(Log::msg(
+					"invalid Content-Length field <", contentLengthStr, ">"
+				).c_str());
+			}
+			// rule 5
+			if(size_t(contentLength) > buffer.size()) {
+				throw HTTPParserException(Log::msg(
+					"while parsing message body, expected length <", contentLength,
+					">, got length <", buffer.size(), "> in buffer"
+				).c_str());
+			}
+			messageBody = string(buffer.begin(), buffer.begin() + contentLength);
+			buffer.erase(buffer.begin(), buffer.begin() + contentLength);
+		}
+		// rule 7
+		if(!isStatusComplete) {
+			throw StatusNotCompleteException(
+				"according to rule 7 in section 3.3.3,\
+				data should be read until connection is closed");
+		}
+		messageBody = string(buffer.begin(), buffer.end());
+		buffer.clear();
 	}
+
+	HTTPStatusParser::HTTPBadStatusException::HTTPBadStatusException(const char* msg) :
+		HTTPBadMessageException(msg) {}
 
 	HTTPStatusParser::StatusNotCompleteException::StatusNotCompleteException(const char* msg) {
 		this->msg = msg;

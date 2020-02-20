@@ -38,7 +38,9 @@ public:
 				getCRLFLine();
 				Log::testFail(TAG, "case <" + s + ">");
 				failFlag = true;
-			} catch(CRLFException e) {}
+			} 
+			catch(HTTPBadMessageException e) {}
+			catch(HTTPParserException e) {}
 		}
 
 		vector<string> legalCases = {
@@ -71,7 +73,12 @@ public:
 					Log::testFail(TAG, Log::msg("case <" + legalCases[i] + ">, buffer state ", i));
 					failFlag = true;	
 				}
-			} catch(CRLFException e) {
+			} 
+			catch(HTTPBadMessageException e) {
+				Log::testFail(TAG, Log::msg("case <" + legalCases[i] + ">, exception ", e.what(), ", ", i));
+				failFlag = true;
+			}
+			catch(HTTPParserException e) {
 				Log::testFail(TAG, Log::msg("case <" + legalCases[i] + ">, exception ", e.what(), ", ", i));
 				failFlag = true;
 			}
@@ -101,9 +108,9 @@ public:
 				parseHeaderFields();
 				failFlag = true;
 				Log::testFail(TAG, Log::msg("ILLEGAL CASE <", illegalCases[i], ">"));
-			}
-			catch(CRLFException e) {} 
+			} 
 			catch(HTTPParserException e) {}
+			catch(HTTPBadMessageException e) {}
 		}
 
 
@@ -132,7 +139,12 @@ public:
 						Log::testFail(TAG, Log::msg("\t<", e.first, "> <", e.second, ">"));
 					}
 				}
-			} catch(HTTPParserException e) {
+			} 
+			catch(HTTPParserException e) {
+				failFlag = true;
+				Log::testFail(TAG, Log::msg("exception: ", e.what()));
+			}
+			catch(HTTPBadMessageException e) {
 				failFlag = true;
 				Log::testFail(TAG, Log::msg("exception: ", e.what()));
 			}
@@ -175,8 +187,8 @@ public:
 				failFlag = true;
 				Log::testFail(TAG, Log::msg("<", illegalCases[i], ">"));
 			}
-			catch(CRLFException e) {} 
 			catch(HTTPParserException e) {}
+			catch(HTTPBadMessageException e) {}
 		}
 
 
@@ -217,7 +229,12 @@ public:
 					failFlag = true;
 					Log::testFail(TAG, "version");
 				}
-			} catch(HTTPParserException e) {
+			} 
+			catch(HTTPParserException e) {
+				failFlag = true;
+				Log::testFail(TAG, Log::msg("exception: ", e.what()));
+			}
+			catch(HTTPBadMessageException e) {
 				failFlag = true;
 				Log::testFail(TAG, Log::msg("exception: ", e.what()));
 			}
@@ -259,8 +276,8 @@ public:
 				failFlag = true;
 				Log::testFail(TAG, Log::msg("<", illegalCases[i], ">"));
 			}
-			catch(CRLFException e) {} 
 			catch(HTTPParserException e) {}
+			catch(HTTPBadMessageException e) {}
 		}
 
 
@@ -301,7 +318,12 @@ public:
 					failFlag = true;
 					Log::testFail(TAG, "reason");
 				}
-			} catch(HTTPParserException e) {
+			} 
+			catch(HTTPParserException e) {
+				failFlag = true;
+				Log::testFail(TAG, Log::msg("exception: ", e.what()));
+			}
+			catch(HTTPBadMessageException e) {
 				failFlag = true;
 				Log::testFail(TAG, Log::msg("exception: ", e.what()));
 			}
