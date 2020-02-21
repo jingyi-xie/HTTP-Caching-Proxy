@@ -18,6 +18,9 @@ Search BROKEN to find places where this program breaks the HTTP standard
 
 /*
 
+Below are references for this program's implementation;
+every behavior in every function can be found in below comments
+
 To get start with HTTP, see https://tools.ietf.org/html/rfc7230#section-2
 
 3. Message Format (https://tools.ietf.org/html/rfc7230#section-3)
@@ -55,6 +58,16 @@ are treated as unrecognized errors
 
 * request-target (section-5.3)
 	request-target = absolute-form / authority-form / ...
+
+	absolute-form = absolute-URI
+	absolute-URI  = scheme ":" hier-part [ "?" query ] (https://tools.ietf.org/html/rfc3986#section-4.3)
+	hier-part     = "//" authority path-abempty (rfc 3986 page 49)
+					 / path-absolute
+					 / path-rootless
+					 / path-empty
+	authority-form = authority (rfc 7230 5.3.3)
+
+	
 
 	When making a request to a proxy, other than a CONNECT or server-wide
 	OPTIONS request (as detailed below), a client MUST send the target
@@ -192,6 +205,16 @@ and will cause an HTTP 400 (bad request) error
      Remove Trailer from existing header fields
 */
 
+/*
+
+About CONNECT
+See CONNECT at https://tools.ietf.org/html/rfc7231#section-4.3.6
+
+request-target = authority-form (rfc 7230 5.3)
+authority-form = authority (rfc 7230 5.3.3)
+authority = [ userinfo "@" ] host [ ":" port ] (https://tools.ietf.org/html/rfc3986#section-3.2)
+
+*/
 
 
 /*
@@ -216,19 +239,46 @@ and will cause an HTTP 400 (bad request) error
 namespace zq29 {
 namespace zq29Inner {
 
-	bool isDigit(char c);
+	/*
+	 * utility functions
+	*/
+	namespace utils {
+		bool isDigit(char c);
+
+		/*
+		 * as the name suggests, parse a non-negative
+		 * hex number string to an integer
+		 * returns -1 on any error
+		*/
+		int nonNegHexStrToInt(const string& s);
+		/*
+		 * reverse of the above funnction
+		*/
+		//string sizeToHexStr(const size_t s);
+	}
 
 	/*
-	 * as the name suggests, parse a non-negative
-	 * hex number string to an integer
-	 * returns -1 on any error
+	 * shortcut functions
+	 * 
+	 * sc stands for shortcut
 	*/
-	int nonNegHexStrToInt(const string& s);
+	namespace sc {
+		/*
+		 * build HTML string from a HTTP 400 Bad Request error
+		*/
+		string getHTTP400HTMLStr(const string& error);
+
+		/*
+		 * hack the status HTML string, add "<h1>zq29 HTTP Cache Proxy</h1>"
+		 * if no <body> tag, do nothing
+		*/
+		string hackStatusHTML(string html);
+	}
 
 
 
 	class HTTPMessage {
-	protected:
+	public:
 		/*
 		 * some header fields may have the same filed name
 		 * but different value, so use set<pair<>>
@@ -236,7 +286,8 @@ namespace zq29Inner {
 		set<pair<string, string>> headerFields;
 
 		string messageBody;
-	public:
+	
+		HTTPMessage();
 		HTTPMessage(const set<pair<string, string>>& h, const string& m);
 
 		virtual string toStr() = 0;
@@ -252,12 +303,12 @@ namespace zq29Inner {
 			string httpVersion;
 		};
 
+		HTTPRequest();
 		HTTPRequest(const RequestLine& r, 
 			const set<pair<string, string>>& h, const string& m);
 
 		virtual string toStr() override;
 
-	private:
 		RequestLine requestLine;
 	};
 
@@ -271,12 +322,12 @@ namespace zq29Inner {
 			string reasonPhrase;
 		};
 
+		HTTPStatus();
 		HTTPStatus(const StatusLine& s, 
 			const set<pair<string, string>>& h, const string& m);
 
 		virtual string toStr() override;
 
-	private:
 		StatusLine statusLine;
 	};
 
@@ -330,22 +381,6 @@ namespace zq29Inner {
 		*/
 		string getCRLFLine();
 
-		class HTTPBadMessageException : public exception {
-		private:
-			const char* msg;
-		public:
-			HTTPBadMessageException(const char* msg = "");
-			const char* what() const throw() override;
-		};
-
-		class HTTPParserException : public exception {
-		private:
-			const char* msg;
-		public:
-			HTTPParserException(const char* msg = "");
-			const char* what() const throw() override;
-		};
-
 		/*
 		 * extract header fields from buffer,
 		 * set headerFields
@@ -369,6 +404,22 @@ namespace zq29Inner {
 		virtual void parseMessageBody() = 0;
 
 	public:
+		class HTTPBadMessageException : public exception {
+		private:
+			const char* msg;
+		public:
+			HTTPBadMessageException(const char* msg = "");
+			const char* what() const throw() override;
+		};
+
+		class HTTPParserException : public exception {
+		private:
+			const char* msg;
+		public:
+			HTTPParserException(const char* msg = "");
+			const char* what() const throw() override;
+		};
+
 		/*
 		 * before set the buffer, it will also triggers to clear the object
 		*/
@@ -410,6 +461,24 @@ namespace zq29Inner {
 		 * on failure, throw exceptions
 		*/
 		HTTPRequest build();
+
+		/*
+		 * static methods help parse member into more fields
+		 * e.g. parse requestLine.requestTarget in to authority-form,
+		 * 		which is [ userinfo "@" ] host [ ":" port ]
+		*/
+
+		struct AuthorityForm {
+			string host;
+			string port;
+		};
+		static AuthorityForm parseAuthorityForm(const string& str, bool isConnect);
+		static AuthorityForm parseAuthorityForm(const HTTPRequest& req);
+		struct AbsoluteForm {
+			AuthorityForm authorityForm;
+			string path;
+		};
+		static AbsoluteForm parseAbsoluteForm(const HTTPRequest& req);
 	};
 
 
@@ -434,11 +503,10 @@ namespace zq29Inner {
 
 		// see section 3.3.3 rule 2
 		bool isRespToCONNECT;
-		void setRespToCONNECT(bool b);
 
 		// see srction 3.3.3 rule 3
 		bool isStatusComplete;
-		void setStatusComplete(bool b);
+		
 
 		void parseStatusLine();
 
@@ -446,6 +514,9 @@ namespace zq29Inner {
 
 	public:
 		HTTPStatusParser();
+
+		void setRespToCONNECT(bool b);
+		void setStatusComplete(bool b);
 
 		class HTTPBadStatusException : public HTTPBadMessageException {
 		public:
@@ -482,13 +553,13 @@ namespace zq29Inner {
 	/////////////////////////////////////////////////////////////////////////////////
 	//////////////////////////// Utils Implementation ///////////////////////////////
 	/////////////////////////////////////////////////////////////////////////////////
-	bool isDigit(char c) {
+	bool utils::isDigit(char c) {
 		return (c >= '0' && c <= '9');
 	}
 
-	int nonNegHexStrToInt(const string& s) {
+	int utils::nonNegHexStrToInt(const string& s) {
 		int i = -1;   
-		std::stringstream ss;
+		stringstream ss;
 		ss << std::hex << s;
 		ss >> i;
 		string foo;
@@ -496,10 +567,16 @@ namespace zq29Inner {
 		return i;
 	}
 
+	/*
+	string utils::sizeToHexStr(const size_t s) {
+	}
+	*/
+
 
 	/////////////////////////////////////////////////////////////////////////////////
 	//////////////////////////// HTTPMessage Implementation /////////////////////////
 	/////////////////////////////////////////////////////////////////////////////////
+	HTTPMessage::HTTPMessage() {}
 	HTTPMessage::HTTPMessage(const set<pair<string, string>>& h, const string& m) : 
 		headerFields(h), messageBody(m) {}
 
@@ -508,6 +585,7 @@ namespace zq29Inner {
 	/////////////////////////////////////////////////////////////////////////////////
 	//////////////////////////// HTTPRequest Implementation /////////////////////////
 	/////////////////////////////////////////////////////////////////////////////////
+	HTTPRequest::HTTPRequest() {}
 	HTTPRequest::HTTPRequest(const RequestLine& r, 
 		const set<pair<string, string>>& h, const string& m) :
 		HTTPMessage(h, m), requestLine(r) {}
@@ -530,6 +608,7 @@ namespace zq29Inner {
 	/////////////////////////////////////////////////////////////////////////////////
 	//////////////////////////// HTTPStatus Implementation //////////////////////////
 	/////////////////////////////////////////////////////////////////////////////////
+	HTTPStatus::HTTPStatus() {}
 	HTTPStatus::HTTPStatus(const StatusLine& s, 
 		const set<pair<string, string>>& h, const string& m) :
 		HTTPMessage(h, m), statusLine(s) {}
@@ -686,37 +765,6 @@ namespace zq29Inner {
 	}
 
 	void HTTPParser::parseChunkedMessageBody() {
-		/*
-     chunked-body   = *chunk
-                      last-chunk
-                      trailer-part
-                      CRLF
-
-     chunk          = chunk-size [ chunk-ext ] CRLF
-                      chunk-data CRLF
-     chunk-size     = 1*HEXDIG
-     last-chunk     = 1*("0") [ chunk-ext ] CRLF
-
-	 length := 0
-     read chunk-size, chunk-ext (if any), and CRLF
-     while (chunk-size > 0) {
-        read chunk-data and CRLF
-        append chunk-data to decoded-body
-        length := length + chunk-size
-        read chunk-size, chunk-ext (if any), and CRLF
-     }
-     read trailer field
-     while (trailer field is not empty) {
-        if (trailer field is allowed to be sent in a trailer) {
-            append trailer field to existing header fields
-        }
-        read trailer-field
-     }
-     Content-Length := length
-     Remove "chunked" from Transfer-Encoding
-     Remove Trailer from existing header fields
-		*/
-
 		stringstream body;
 		// mini-function
 		auto getChunkSize = [this, &body]()->size_t {
@@ -727,7 +775,7 @@ namespace zq29Inner {
 			ss << line;
 			string chunkSizeStr;
 			ss >> chunkSizeStr;
-			int chunkSize = nonNegHexStrToInt(chunkSizeStr);
+			int chunkSize = utils::nonNegHexStrToInt(chunkSizeStr);
 			if(chunkSize == -1) {
 				throw HTTPBadMessageException("while parsing chunked message,"\
 					" failed to recognize chunk size");
@@ -854,7 +902,9 @@ namespace zq29Inner {
 		static const set<string> METHODS = { "GET", "POST", "CONNECT" };
 		ss >> temp;
 		if(METHODS.find(temp) == METHODS.end()) {
-			throw HTTP400Exception("request method not recognized");
+			throw HTTP400Exception(Log::msg(
+				"request method <", temp, "> not recognized"
+			).c_str());
 		}
 		requestLine.method = temp;
 
@@ -874,7 +924,7 @@ namespace zq29Inner {
 		}
 		ss >> temp;
 		if(temp.length() != 8 || temp.substr(0, 5) != "HTTP/" || 
-			temp[6] != '.' || !isDigit(temp[5]) || !isDigit(temp[7])) {
+			temp[6] != '.' || !utils::isDigit(temp[5]) || !utils::isDigit(temp[7])) {
 			throw HTTP400Exception("request HTTP version not recognized");
 		}
 		requestLine.httpVersion = temp;
@@ -956,7 +1006,50 @@ namespace zq29Inner {
 		return HTTPRequest(requestLine, headerFields, messageBody);
 	}
 
+	HTTPRequestParser::AuthorityForm HTTPRequestParser::parseAuthorityForm(const string& str, bool isConnect) {
+		AuthorityForm af;
+		const size_t sp = str.find(':');
+		if(isConnect && sp == string::npos) {
+			throw HTTP400Exception("Bad authority-form in CONNECT: "\
+				"a ':' was expected and none found");
+		}
+		af.host = str.substr(0, sp);
+		af.port = (sp == string::npos ? "" : str.substr(sp + 1, string::npos));
+		return af;
+	}
 
+	HTTPRequestParser::AuthorityForm HTTPRequestParser::parseAuthorityForm(const HTTPRequest& req) {
+		const HTTPRequest::RequestLine& line = req.requestLine;
+		if(line.method != "CONNECT") {
+			throw HTTP400Exception("According to rfc7230 5.3.3: the authority-form "\
+				"of request-target is only used for CONNECT requests");
+		}
+		return parseAuthorityForm(line.requestTarget, true);
+	}
+
+	HTTPRequestParser::AbsoluteForm HTTPRequestParser::parseAbsoluteForm(const HTTPRequest& req) {
+		const HTTPRequest::RequestLine& line = req.requestLine;
+		if(line.method != "GET" && line.method != "POST") {
+			throw HTTP400Exception("This program only supports absolute-form for GET & POST");
+		}
+		if(line.requestTarget.find("http://") != 0) {
+			throw HTTP400Exception(Log::msg(
+				"Bad request-target: " + line.requestTarget
+			).c_str());
+		}
+
+		AbsoluteForm absoluteForm;
+		string rest = line.requestTarget.substr(7, string::npos);
+		size_t sp = rest.find('/');
+		if(sp != string::npos) { // if there is path
+			absoluteForm.path = rest.substr(sp, string::npos);
+			absoluteForm.authorityForm = parseAuthorityForm(rest.substr(0, sp), false);
+		} else {
+			absoluteForm.path = "";
+			absoluteForm.authorityForm = parseAuthorityForm(rest, false);
+		}
+		return absoluteForm;
+	}
 
 
 
@@ -992,7 +1085,7 @@ namespace zq29Inner {
 		// get http version
 		ss >> temp;
 		if(temp.length() != 8 || temp.substr(0, 5) != "HTTP/" || 
-			temp[6] != '.' || !isDigit(temp[5]) || !isDigit(temp[7])) {
+			temp[6] != '.' || !utils::isDigit(temp[5]) || !utils::isDigit(temp[7])) {
 			throw HTTPBadStatusException("status line: HTTP version not recognized");
 		}
 		statusLine.httpVersion = temp;
@@ -1001,8 +1094,8 @@ namespace zq29Inner {
 
 		// get status code
 		ss >> temp;
-		if(temp.length() != 3 || !isDigit(temp[0]) || 
-			!isDigit(temp[1]) || !isDigit(temp[2])) {
+		if(temp.length() != 3 || !utils::isDigit(temp[0]) || 
+			!utils::isDigit(temp[1]) || !utils::isDigit(temp[2])) {
 			throw HTTPBadStatusException("status line: status code not recognized");
 		}
 		statusLine.statusCode = temp;
@@ -1126,6 +1219,40 @@ namespace zq29Inner {
 
 
 
+
+
+	/////////////////////////////////////////////////////////////////////////////////
+	//////////////////////////// Shortcuts Implementation ///////////////////////////
+	/////////////////////////////////////////////////////////////////////////////////
+	string sc::getHTTP400HTMLStr(const string& error) {
+		const string html = "<!DOCTYPE html PUBLIC \"-//IETF//DTD HTML 2.0//EN\">\n"\
+			"<html><head><meta http-equiv=\"Content-Type\" content=\"text/html\">\n"\
+			"<title>400 Bad Request</title>\n</head><body><h1>400 Bad Request</h1>\n<p>" +
+			error + "</p>\n<hr><address>zq29 HTTP Cache Proxy</address></body></html>\n";
+
+		HTTPStatus::StatusLine sl;
+		sl.httpVersion = "HTTP/1.1";
+		sl.statusCode = "400";
+		sl.reasonPhrase = "Bad Request";
+
+		set<pair<string, string>> headers;
+		stringstream ss;
+		ss << html.length();
+		headers.insert(make_pair("Content-Length", ss.str()));
+
+		HTTPStatus resp(sl, headers, html);
+		return resp.toStr();
+	}
+
+	string sc::hackStatusHTML(string html) {
+		size_t sp = html.find("<body>");
+		if(sp == string::npos) { return html; }
+
+		html.insert(sp + 6, "<h1>zq29 HTTP Cache Proxy</h1>");
+		cout << "Hacked! proof: " << html.substr(sp, 50);
+		return html;
+	}
+
 }
 	using zq29Inner::HTTPMessage;
 	using zq29Inner::HTTPRequest;
@@ -1133,6 +1260,9 @@ namespace zq29Inner {
 	using zq29Inner::HTTPParser;
 	using zq29Inner::HTTPRequestParser;
 	using zq29Inner::HTTPStatusParser;
+
+	using namespace zq29Inner::utils;
+	using namespace zq29Inner::sc;
 }
 
 #endif

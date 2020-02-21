@@ -1,12 +1,16 @@
 #include <iostream>
 #include <fstream>
 #include <assert.h>
+#include <set>
+#include <fstream>
 
+#include "testHelper/socket.hpp" // from project 3 of ECE 650
+#include "testHelper/log.hpp"
 #include "httpparser.hpp"
-#include "../log.hpp"
 
-using namespace std;
+using namespace zq29::zqSok;
 using namespace zq29;
+using namespace std;
 
 vector<char> buildCharVec(const string& str) {
 	return vector<char>(str.begin(), str.end());
@@ -15,8 +19,8 @@ string buildStrFromCharVec(const vector<char>& v) {
 	return string(v.begin(), v.end());
 }
 
-void testNonNegHexStrToInt() {
-	static const string TAG = "testNonNegHexStrToInt";
+void testHexParsing() {
+	static const string TAG = "testHexParsing";
 	bool failFlag = false;
 
 	const vector<string> hexStrs = {
@@ -33,9 +37,9 @@ void testNonNegHexStrToInt() {
 	};
 	assert(hexStrs.size() == ints.size());
 	for(size_t i = 0; i < hexStrs.size(); i++) {
-		const int res = zq29Inner::nonNegHexStrToInt(hexStrs[i]);
+		const int res = nonNegHexStrToInt(hexStrs[i]);
 		if(res != ints[i]) {
-			Log::testFail(TAG, Log::msg("case <", hexStrs[i], ">, got <", res, ">"));
+			Log::testFail(TAG, Log::msg("str to hex, case <", hexStrs[i], ">, got <", res, ">"));
 			failFlag = true;
 		}
 	}
@@ -423,13 +427,113 @@ public:
 
 	void doTest() {
 		testParseStatusLine();
+		Log::setVerbose(false);
 		testValidCases();
+		Log::setVerbose(true);
 	}
 };
 
+
+
+void proxyTest() {
+	const size_t bufferSize = 1024 * 64;
+	const int listenSocket = startListening("1234", 5);
+
+	while(true) {
+		// recv request
+		sockaddr_storage socketAddr;
+		socklen_t socketAddrLen = sizeof(socketAddr);
+		Log::verbose("waiting accept...");
+		const int socketFd = accept(listenSocket, (sockaddr*)&socketAddr, &socketAddrLen);
+		Log::verbose("accepted!");
+
+		Log::verbose("waiting recv...");
+		char buffer[bufferSize];
+		int len = recv(socketFd, buffer, bufferSize, 0);
+		Log::verbose("received!");
+
+		const string recvStr(buffer, len);
+
+		// parse request
+		static const size_t nRetry = 5;
+		HTTPRequestParser requestParser;
+		HTTPRequest request;
+		for(size_t _ = 0; _ < nRetry; _++) {
+			requestParser.setBuffer(vector<char>(buffer, buffer + len));
+			try {
+				request = requestParser.build();
+				break;
+			} 
+			catch(HTTPParser::HTTPParserException e) {
+				Log::verbose(Log::msg("While building request, HTTPParserException: ", e.what()));
+			}
+		}
+
+		Log::verbose("Got request:\n" + request.toStr() + "\n");
+
+		// handle request
+		if(request.requestLine.method == "GET") {
+			Log::success("Got GET request");
+			// connect to the server
+			HTTPRequestParser::AbsoluteForm af = HTTPRequestParser::parseAbsoluteForm(request);
+			Log::verbose("Target: " + af.authorityForm.host + ":" + af.authorityForm.port);
+
+			const char* addr = af.authorityForm.host.c_str();
+			const char* port = af.authorityForm.port == "" ? "80" : af.authorityForm.port.c_str();
+			Log::verbose(Log::msg("Connecting to ", addr, ":", port, "..."));
+			ConnectInfo connectInfo = connect(addr, port);
+			
+			Log::verbose("Connected! Sending req...");
+			sendAll(connectInfo.socketFd, request.toStr());
+			
+			Log::verbose("Sent! Waiting for recv & build...");
+			HTTPStatusParser statusParser;
+			HTTPStatus resp;
+			int recLen = 0;
+			for(size_t _ = 0; _ < nRetry; _++) {
+				int temp = recv(connectInfo.socketFd, buffer + recLen, bufferSize, 0);
+				if(temp < 0) { statusParser.setStatusComplete(true); }
+				else { recLen += temp; }
+				statusParser.setBuffer(vector<char>(buffer, buffer + recLen));
+				try {
+					resp = statusParser.build();
+					break;
+				} catch(HTTPParser::HTTPParserException e) {
+					Log::verbose(Log::msg("While parsing response: ", e.what()));
+					Log::verbose("Retry...");
+				}
+			}
+			Log::verbose("Recved!");
+
+			
+			//Log::success("Got response from server:\n" + resp.toStr());
+
+			Log::verbose("Sending back to client...");
+			sendAll(socketFd, hackStatusHTML(resp.toStr()));
+			Log::verbose("Sent!");
+			//sendAll(socketFd, getHTTP400HTMLStr("This is for testing"));
+			//Log::verbose("resp:\n" + getHTTP400HTMLStr("This is for testing"));
+		} 
+		/*
+		else if(request.requestLine.method == "CONNECT") {
+			Log::success("Got GET request");
+			//auto af = HTTPRequestParser::parseAuthorityForm(request);
+			//ConnectInfo connectInfo = coonect(af.hostname.c_str(), af.port.c_str());
+			sendAll(socketFd, getHTTP400HTMLStr("This is for testing"));
+			Log::verbose("resp:\n" + getHTTP400HTMLStr("This is for testing"));
+		}
+		*/
+
+		close(socketFd);
+	}
+}
+
+
+
 int main() {
-	testNonNegHexStrToInt();
+	testHexParsing();
 	HTTPParserTest().doTest();
 	HTTPRequestParserTest().doTest();
 	HTTPStatusParserTest().doTest();
+	proxyTest();
 }
