@@ -53,6 +53,11 @@ namespace zq29Inner {
 			return ss.str();
 		}
 
+		static void success(const string& msg) {
+			lock_guard<mutex> lck(printLock);
+			__printGreenNoLock(msg);
+		}
+
 		static void testSuccess(const string& testName) {
 			lock_guard<mutex> lck(printLock);
 			__printGreenNoLock(Log::msg("Test <", testName, "> passed!"));
@@ -96,10 +101,9 @@ namespace zq29Inner {
 			}
 		}
 
-		template<typename ExceptionType>
 		static void errorThenThrow(const string& msg) {
 			error(msg);
-			throw ExceptionType(msg.c_str());
+			throw runtime_error(msg.c_str());
 		}
 
 	};

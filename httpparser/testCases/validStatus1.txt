@@ -1,0 +1,15 @@
+HTTP/1.1 302 Moved Temporarily
+Server: bfe/1.0.8.18
+Date: Thu, 20 Feb 2020 22:09:52 GMT
+Content-Type: text/html
+Content-Length: 161
+Connection: close
+Location: http://www.baidu.com/error.html
+
+<html>
+<head><title>302 Found</title></head>
+<body bgcolor="white">
+<center><h1>302 Found</h1></center>
+<hr><center>bfe/1.0.8.18</center>
+</body>
+</html>

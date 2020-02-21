@@ -156,6 +156,40 @@ and will cause an HTTP 400 (bad request) error
        number of octets received prior to the server closing the
        connection.
 
+4.1 Chunked Transfer Coding
+     chunked-body   = *chunk
+                      last-chunk
+                      trailer-part
+                      CRLF
+
+     chunk          = chunk-size [ chunk-ext ] CRLF
+                      chunk-data CRLF
+     chunk-size     = 1*HEXDIG
+     last-chunk     = 1*("0") [ chunk-ext ] CRLF
+
+     chunk-data     = 1*OCTET ; a sequence of chunk-size octets
+4.1.3. Decoding Chunked
+   A process for decoding the chunked transfer coding can be represented
+   in pseudo-code as:
+
+     length := 0
+     read chunk-size, chunk-ext (if any), and CRLF
+     while (chunk-size > 0) {
+        read chunk-data and CRLF
+        append chunk-data to decoded-body
+        length := length + chunk-size
+        read chunk-size, chunk-ext (if any), and CRLF
+     }
+     read trailer field
+     while (trailer field is not empty) {
+        if (trailer field is allowed to be sent in a trailer) {
+            append trailer field to existing header fields
+        }
+        read trailer-field
+     }
+     Content-Length := length
+     Remove "chunked" from Transfer-Encoding
+     Remove Trailer from existing header fields
 */
 
 
@@ -184,6 +218,13 @@ namespace zq29Inner {
 
 	bool isDigit(char c);
 
+	/*
+	 * as the name suggests, parse a non-negative
+	 * hex number string to an integer
+	 * returns -1 on any error
+	*/
+	int nonNegHexStrToInt(const string& s);
+
 
 
 	class HTTPMessage {
@@ -197,6 +238,8 @@ namespace zq29Inner {
 		string messageBody;
 	public:
 		HTTPMessage(const set<pair<string, string>>& h, const string& m);
+
+		virtual string toStr() = 0;
 	};
 
 
@@ -211,6 +254,9 @@ namespace zq29Inner {
 
 		HTTPRequest(const RequestLine& r, 
 			const set<pair<string, string>>& h, const string& m);
+
+		virtual string toStr() override;
+
 	private:
 		RequestLine requestLine;
 	};
@@ -227,6 +273,9 @@ namespace zq29Inner {
 
 		HTTPStatus(const StatusLine& s, 
 			const set<pair<string, string>>& h, const string& m);
+
+		virtual string toStr() override;
+
 	private:
 		StatusLine statusLine;
 	};
@@ -323,7 +372,7 @@ namespace zq29Inner {
 		/*
 		 * before set the buffer, it will also triggers to clear the object
 		*/
-		void setBuffer(const vector<char>& bufferContent);
+		virtual void setBuffer(const vector<char>& bufferContent);
 		vector<char> getBuffer() const;
 
 		virtual void clear();
@@ -349,6 +398,7 @@ namespace zq29Inner {
 			HTTP400Exception(const char* msg);
 		};
 
+		virtual void setBuffer(const vector<char>& bufferContent) override;
 		virtual void clear() override;
 		/*
 		 * return an HTTPRequest object that is
@@ -410,6 +460,7 @@ namespace zq29Inner {
 			const char* what() const throw() override;
 		};
 
+		virtual void setBuffer(const vector<char>& bufferContent) override;
 		virtual void clear() override;
 
 		/*
@@ -435,6 +486,16 @@ namespace zq29Inner {
 		return (c >= '0' && c <= '9');
 	}
 
+	int nonNegHexStrToInt(const string& s) {
+		int i = -1;   
+		std::stringstream ss;
+		ss << std::hex << s;
+		ss >> i;
+		string foo;
+		if(!ss || ss >> foo || i < 0) { return -1; }
+		return i;
+	}
+
 
 	/////////////////////////////////////////////////////////////////////////////////
 	//////////////////////////// HTTPMessage Implementation /////////////////////////
@@ -451,6 +512,20 @@ namespace zq29Inner {
 		const set<pair<string, string>>& h, const string& m) :
 		HTTPMessage(h, m), requestLine(r) {}
 
+	string HTTPRequest::toStr() {
+		stringstream ss;
+		ss << requestLine.method << " "
+			<< requestLine.requestTarget << " "
+			<< requestLine.httpVersion << "\r\n";
+		for(auto const& e : headerFields) {
+			ss << e.first << ": "
+				<< e.second << "\r\n";
+		}
+		ss << "\r\n";
+		ss << messageBody;
+		return ss.str();
+	}
+
 
 	/////////////////////////////////////////////////////////////////////////////////
 	//////////////////////////// HTTPStatus Implementation //////////////////////////
@@ -459,7 +534,19 @@ namespace zq29Inner {
 		const set<pair<string, string>>& h, const string& m) :
 		HTTPMessage(h, m), statusLine(s) {}
 
-
+	string HTTPStatus::toStr() {
+		stringstream ss;
+		ss << statusLine.httpVersion << " "
+			<< statusLine.statusCode << " "
+			<< statusLine.reasonPhrase << "\r\n";
+		for(auto const& e : headerFields) {
+			ss << e.first << ": "
+				<< e.second << "\r\n";
+		}
+		ss << "\r\n";
+		ss << messageBody;
+		return ss.str();
+	}
 
 
 
@@ -599,7 +686,83 @@ namespace zq29Inner {
 	}
 
 	void HTTPParser::parseChunkedMessageBody() {
-		// TODO: see 4.1.3
+		/*
+     chunked-body   = *chunk
+                      last-chunk
+                      trailer-part
+                      CRLF
+
+     chunk          = chunk-size [ chunk-ext ] CRLF
+                      chunk-data CRLF
+     chunk-size     = 1*HEXDIG
+     last-chunk     = 1*("0") [ chunk-ext ] CRLF
+
+	 length := 0
+     read chunk-size, chunk-ext (if any), and CRLF
+     while (chunk-size > 0) {
+        read chunk-data and CRLF
+        append chunk-data to decoded-body
+        length := length + chunk-size
+        read chunk-size, chunk-ext (if any), and CRLF
+     }
+     read trailer field
+     while (trailer field is not empty) {
+        if (trailer field is allowed to be sent in a trailer) {
+            append trailer field to existing header fields
+        }
+        read trailer-field
+     }
+     Content-Length := length
+     Remove "chunked" from Transfer-Encoding
+     Remove Trailer from existing header fields
+		*/
+
+		stringstream body;
+		// mini-function
+		auto getChunkSize = [this, &body]()->size_t {
+			const string line = getCRLFLine();
+			body << line << "\r\n";
+
+			stringstream ss;
+			ss << line;
+			string chunkSizeStr;
+			ss >> chunkSizeStr;
+			int chunkSize = nonNegHexStrToInt(chunkSizeStr);
+			if(chunkSize == -1) {
+				throw HTTPBadMessageException("while parsing chunked message,"\
+					" failed to recognize chunk size");
+			}
+			return (size_t)chunkSize;
+		};
+
+		size_t chunkSize = getChunkSize();
+		while(chunkSize > 0) {
+			// read chunk data
+			if(buffer.size() >= chunkSize) {
+				body << string(buffer.begin(), buffer.begin() + chunkSize);
+				buffer.erase(buffer.begin(), buffer.begin() + chunkSize);
+			} else {
+				throw HTTPParserException("buffer size < Content-Length");
+			}
+			// read CR LF
+			if(getCRLFLine() != "") { // if buffer is not long enough, exceptions will be thrown
+				throw HTTPBadMessageException("while parsing chunked message,"\
+					" expected CR LF at the end of the chunk data");
+			}
+			body << "\r\n";
+			chunkSize = getChunkSize();
+		}
+
+		// [BROKEN]: we'll ignore the trailer-part
+		if(buffer.size() > 0) { // if there is a trailer
+			string line;
+			while((line = getCRLFLine()) != "") {
+				body << line << "\r\n";
+			}
+		}
+
+		// [BROKEN]: we won't set Content-Length, instead we keep the message as it is
+		messageBody = body.str();
 	}
 
 	void HTTPParser::setBuffer(const vector<char>& buffer) {
@@ -762,8 +925,12 @@ namespace zq29Inner {
 					">, got length <", buffer.size(), "> in buffer"
 				).c_str());
 			}
-			messageBody = string(buffer.begin(), buffer.begin() + contentLength);
-			buffer.erase(buffer.begin(), buffer.begin() + contentLength);
+			if(buffer.size() >= size_t(contentLength)) {
+				messageBody = string(buffer.begin(), buffer.begin() + contentLength);
+				buffer.erase(buffer.begin(), buffer.begin() + contentLength);
+			} else {
+				throw HTTPParserException("buffer size < Content-Length");
+			}
 		}
 		// rule 6
 		messageBody = "";
@@ -772,7 +939,13 @@ namespace zq29Inner {
 	HTTPRequestParser::HTTP400Exception::HTTP400Exception(const char* msg) :
 		HTTPBadMessageException(msg) {}
 
+	void HTTPRequestParser::setBuffer(const vector<char>& bufferContent) {
+		clear();
+		buffer = bufferContent;
+	}
+
 	void HTTPRequestParser::clear() {
+		HTTPParser::clear();
 		requestLine = HTTPRequest::RequestLine();
 	}
 
@@ -903,14 +1076,19 @@ namespace zq29Inner {
 					">, got length <", buffer.size(), "> in buffer"
 				).c_str());
 			}
-			messageBody = string(buffer.begin(), buffer.begin() + contentLength);
-			buffer.erase(buffer.begin(), buffer.begin() + contentLength);
+			if(buffer.size() >= size_t(contentLength)) {
+				messageBody = string(buffer.begin(), buffer.begin() + contentLength);
+				buffer.erase(buffer.begin(), buffer.begin() + contentLength);
+			} else {
+				throw HTTPParserException("buffer size < Content-Length");
+			}
+			return;
 		}
 		// rule 7
 		if(!isStatusComplete) {
 			throw StatusNotCompleteException(
-				"according to rule 7 in section 3.3.3,\
-				data should be read until connection is closed");
+				"according to rule 7 in section 3.3.3, "\
+				"data should be read until connection is closed");
 		}
 		messageBody = string(buffer.begin(), buffer.end());
 		buffer.clear();
@@ -926,7 +1104,13 @@ namespace zq29Inner {
 		return msg;
 	}
 
+	void HTTPStatusParser::setBuffer(const vector<char>& bufferContent) {
+		clear();
+		buffer = bufferContent;
+	}
+
 	void HTTPStatusParser::clear() {
+		HTTPParser::clear();
 		statusLine = HTTPStatus::StatusLine();
 		isRespToCONNECT = false;
 		isStatusComplete = false;

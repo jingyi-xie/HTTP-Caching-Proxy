@@ -1,4 +1,5 @@
 #include <iostream>
+#include <fstream>
 #include <assert.h>
 
 #include "httpparser.hpp"
@@ -12,6 +13,33 @@ vector<char> buildCharVec(const string& str) {
 }
 string buildStrFromCharVec(const vector<char>& v) {
 	return string(v.begin(), v.end());
+}
+
+void testNonNegHexStrToInt() {
+	static const string TAG = "testNonNegHexStrToInt";
+	bool failFlag = false;
+
+	const vector<string> hexStrs = {
+		"", "-1", "0", "1", "f", "F",
+		"1f", "-1f", "ff",
+		" ", "r", "rr", "1r",
+		"0000"
+	};
+	const vector<int> ints = {
+		-1, -1, 0, 1, 15, 15,
+		31, -1, 255,
+		-1, -1, -1, -1,
+		0
+	};
+	assert(hexStrs.size() == ints.size());
+	for(size_t i = 0; i < hexStrs.size(); i++) {
+		const int res = zq29Inner::nonNegHexStrToInt(hexStrs[i]);
+		if(res != ints[i]) {
+			Log::testFail(TAG, Log::msg("case <", hexStrs[i], ">, got <", res, ">"));
+			failFlag = true;
+		}
+	}
+	if(!failFlag) { Log::testSuccess(TAG); }
 }
 
 class HTTPParserTest : public HTTPParser {
@@ -243,8 +271,40 @@ public:
 		if(!failFlag) { Log::testSuccess(TAG); }
 	}
 
+	void testValidCases() {
+		for(int i = 0; i < 100; i++) {
+			stringstream ss;
+			ss << "./httpparser/testCases/validRequest" << i << ".txt";
+			const string filename = ss.str();
+
+			ifstream ifs(filename);
+			if(!ifs) { continue; }
+			const string ifsStr = string(
+				istreambuf_iterator<char>(ifs), 
+				istreambuf_iterator<char>()
+			);
+			ifs.close();
+
+			Log::verbose(Log::msg(
+				"file <", filename, "> ifs string is:\n", ifsStr
+			));
+
+			auto buffer = buildCharVec(ifsStr);
+			setBuffer(buffer);
+			HTTPRequest hr = build();
+
+			Log::verbose(Log::msg(
+				"parse result:\n", hr.toStr()
+			));
+
+		}
+	}
+
 	void doTest() {
 		testParseRequestLine();
+		Log::setVerbose(false);
+		testValidCases();
+		Log::setVerbose(true);
 	}
 };
 
@@ -332,12 +392,43 @@ public:
 		if(!failFlag) { Log::testSuccess(TAG); }
 	}
 
+	void testValidCases() {
+		for(int i = 0; i < 100; i++) {
+			stringstream ss;
+			ss << "./httpparser/testCases/validStatus" << i << ".txt";
+			const string filename = ss.str();
+
+			ifstream ifs(filename);
+			if(!ifs) { continue; }
+			const string ifsStr = string(
+				istreambuf_iterator<char>(ifs), 
+				istreambuf_iterator<char>()
+			);
+			ifs.close();
+
+			Log::verbose(Log::msg(
+				"file <", filename, "> ifs string is:\n", ifsStr
+			));
+
+			auto buffer = buildCharVec(ifsStr);
+			setBuffer(buffer);
+			HTTPStatus st = build();
+
+			Log::verbose(Log::msg(
+				"parse result:\n", st.toStr()
+			));
+
+		}
+	}
+
 	void doTest() {
 		testParseStatusLine();
+		testValidCases();
 	}
 };
 
 int main() {
+	testNonNegHexStrToInt();
 	HTTPParserTest().doTest();
 	HTTPRequestParserTest().doTest();
 	HTTPStatusParserTest().doTest();
