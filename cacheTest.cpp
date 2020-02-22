@@ -1,3 +1,4 @@
+#include <iostream>
 #include "cache.hpp"
 using namespace zq29;
 using namespace std;
@@ -36,6 +37,58 @@ void testCacheBasic() {
 	if(!failFlag) { Log::testSuccess(TAG); }
 }
 
+// this is dangerous
+void testCacheRemoveAll() {
+	const string TAG = "testCacheRemoveAll";
+	bool failFlag = false;
+
+	Cache c;
+	c.save("1", "something");
+	c.save("2", "ohhh");
+
+	Log::warning(Log::msg(
+		"You're about to delete all regular files in <",
+		c.getWdir(), "> !"
+	));
+	cout << "input any char to start, or CTRL-C to stop:";
+	char foo;
+	cin >> foo;
+
+	c.removeAll();
+
+	cout << "check " << c.getWdir() << " to see if there are still files" << endl;
+
+	if(!failFlag) { Log::testSuccess(TAG); }
+}
+
+void testHTTPProxyCacheBasic() {
+	const string TAG = "testHTTPProxyCacheBasic";
+	bool failFlag = false;
+
+	// create and get
+	try {
+		HTTPProxyCache::getInstance();
+		failFlag = true;
+		Log::testFail(TAG, "unexpected success in get obj before create");
+	} catch(const Cache::CacheException& e) {}
+
+	HTTPProxyCache::createInstance();
+	try {
+		HTTPProxyCache::createInstance();
+		failFlag = true;
+		Log::testFail(TAG, "unexpected success in double create");
+	} catch(const Cache::CacheException& e) {}
+
+	HTTPProxyCache::getInstance();
+	HTTPProxyCache::getInstance();
+
+
+
+	if(!failFlag) { Log::testSuccess(TAG); }
+}
+
 int main() {
 	testCacheBasic();
+	//testCacheRemoveAll();
+	testHTTPProxyCacheBasic();
 }
