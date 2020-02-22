@@ -406,17 +406,17 @@ namespace zq29Inner {
 	public:
 		class HTTPBadMessageException : public exception {
 		private:
-			const char* msg;
+			const string msg;
 		public:
-			HTTPBadMessageException(const char* msg = "");
+			HTTPBadMessageException(const string& msg = "");
 			const char* what() const throw() override;
 		};
 
 		class HTTPParserException : public exception {
 		private:
-			const char* msg;
+			const string msg;
 		public:
-			HTTPParserException(const char* msg = "");
+			HTTPParserException(const string& msg = "");
 			const char* what() const throw() override;
 		};
 
@@ -446,7 +446,7 @@ namespace zq29Inner {
 	public:
 		class HTTP400Exception : public HTTPBadMessageException {
 		public:
-			HTTP400Exception(const char* msg);
+			HTTP400Exception(const string& msg);
 		};
 
 		virtual void setBuffer(const vector<char>& bufferContent) override;
@@ -520,14 +520,14 @@ namespace zq29Inner {
 
 		class HTTPBadStatusException : public HTTPBadMessageException {
 		public:
-			HTTPBadStatusException(const char* msg);
+			HTTPBadStatusException(const string& msg);
 		};
 
 		class StatusNotCompleteException : public exception {
 		private:
-			const char* msg;
+			const string msg;
 		public:
-			StatusNotCompleteException(const char* msg = "");
+			StatusNotCompleteException(const string& msg = "");
 			const char* what() const throw() override;
 		};
 
@@ -644,7 +644,7 @@ namespace zq29Inner {
 					throw HTTPBadMessageException(Log::msg(
 						"multiple header fields with name <", name, ">",
 						"were found while calling getHeaderFieldByName"
-					).c_str());
+					));
 				}
 				res = e;
 			}
@@ -659,7 +659,7 @@ namespace zq29Inner {
 					throw HTTPBadMessageException(Log::msg(
 						"multiple header fields with name <", name, ">",
 						"were found while calling getHeaderFieldByName"
-					).c_str());
+					));
 				}
 				res = e;
 			}
@@ -693,7 +693,7 @@ namespace zq29Inner {
 	void HTTPParser::__checkSkipOneSP(stringstream& ss) {
 		if(ss.peek() != ' ') {
 			throw HTTPBadMessageException(Log::msg(
-				"while parsing an HTTP message, expected space(SP), got <", ss.peek(), ">").c_str());	
+				"while parsing an HTTP message, expected space(SP), got <", ss.peek(), ">"));	
 		}
 		ss.ignore();
 		if(isspace(ss.peek())) {
@@ -713,17 +713,13 @@ namespace zq29Inner {
 		}
 	}
 
-	HTTPParser::HTTPParserException::HTTPParserException(const char* msg) {
-		this->msg = msg;
-	} 
+	HTTPParser::HTTPParserException::HTTPParserException(const string& msg) : msg(msg) {} 
 	const char* HTTPParser::HTTPParserException::what() const throw() {
-		return msg;
+		return msg.c_str();
 	}
-	HTTPParser::HTTPBadMessageException::HTTPBadMessageException(const char* msg) {
-		this->msg = msg;
-	} 
+	HTTPParser::HTTPBadMessageException::HTTPBadMessageException(const string& msg) : msg(msg) {} 
 	const char* HTTPParser::HTTPBadMessageException::what() const throw() {
-		return msg;
+		return msg.c_str();
 	}
 
 	string HTTPParser::getCRLFLine() {
@@ -737,13 +733,13 @@ namespace zq29Inner {
 				// i is the last char
 				if(i == buffer.size() - 1) {
 					throw HTTPParserException(Log::msg("'\r' was found while parsing <", 
-						string(buffer.begin(), buffer.end()), ">").c_str());
+						string(buffer.begin(), buffer.end()), ">"));
 				}
 
 				// the next char is not '\n'
 				if(buffer[i + 1] != '\n') {
 					throw HTTPBadMessageException(Log::msg("'\r' was found while parsing <", 
-						string(buffer.begin(), buffer.end()), ">").c_str());
+						string(buffer.begin(), buffer.end()), ">"));
 				}
 
 				// this is what we want!
@@ -757,7 +753,7 @@ namespace zq29Inner {
 				}
 			} else if(buffer[i] == '\n') {
 				throw HTTPBadMessageException(Log::msg("'\n' was found while parsing <", 
-					string(buffer.begin(), buffer.end()), ">").c_str());
+					string(buffer.begin(), buffer.end()), ">"));
 			}
 		}
 		
@@ -839,7 +835,7 @@ namespace zq29Inner {
 				}
 			}
 			if(colIndex == line.size()) {
-				throw HTTPBadMessageException(Log::msg("illegal header-field line <", line, ">").c_str());
+				throw HTTPBadMessageException(Log::msg("illegal header-field line <", line, ">"));
 			}
 
 			// get field name
@@ -904,7 +900,7 @@ namespace zq29Inner {
 		if(METHODS.find(temp) == METHODS.end()) {
 			throw HTTP400Exception(Log::msg(
 				"request method <", temp, "> not recognized"
-			).c_str());
+			));
 		}
 		requestLine.method = temp;
 
@@ -966,14 +962,14 @@ namespace zq29Inner {
 			if(ss >> fool || contentLength < 0) {
 				throw HTTP400Exception(Log::msg(
 					"invalid Content-Length field <", contentLengthStr, ">"
-				).c_str());
+				));
 			}
 			// rule 5
 			if(size_t(contentLength) > buffer.size()) {
 				throw HTTPParserException(Log::msg(
 					"while parsing message body, expected length <", contentLength,
 					">, got length <", buffer.size(), "> in buffer"
-				).c_str());
+				));
 			}
 			if(buffer.size() >= size_t(contentLength)) {
 				messageBody = string(buffer.begin(), buffer.begin() + contentLength);
@@ -986,7 +982,7 @@ namespace zq29Inner {
 		messageBody = "";
 	}
 
-	HTTPRequestParser::HTTP400Exception::HTTP400Exception(const char* msg) :
+	HTTPRequestParser::HTTP400Exception::HTTP400Exception(const string& msg) :
 		HTTPBadMessageException(msg) {}
 
 	void HTTPRequestParser::setBuffer(const vector<char>& bufferContent) {
@@ -1035,7 +1031,7 @@ namespace zq29Inner {
 		if(line.requestTarget.find("http://") != 0) {
 			throw HTTP400Exception(Log::msg(
 				"Bad request-target: " + line.requestTarget
-			).c_str());
+			));
 		}
 
 		AbsoluteForm absoluteForm;
@@ -1160,14 +1156,14 @@ namespace zq29Inner {
 			if(ss >> fool || contentLength < 0) {
 				throw HTTPBadStatusException(Log::msg(
 					"invalid Content-Length field <", contentLengthStr, ">"
-				).c_str());
+				));
 			}
 			// rule 5
 			if(size_t(contentLength) > buffer.size()) {
 				throw HTTPParserException(Log::msg(
 					"while parsing message body, expected length <", contentLength,
 					">, got length <", buffer.size(), "> in buffer"
-				).c_str());
+				));
 			}
 			if(buffer.size() >= size_t(contentLength)) {
 				messageBody = string(buffer.begin(), buffer.begin() + contentLength);
@@ -1187,14 +1183,12 @@ namespace zq29Inner {
 		buffer.clear();
 	}
 
-	HTTPStatusParser::HTTPBadStatusException::HTTPBadStatusException(const char* msg) :
+	HTTPStatusParser::HTTPBadStatusException::HTTPBadStatusException(const string& msg) :
 		HTTPBadMessageException(msg) {}
 
-	HTTPStatusParser::StatusNotCompleteException::StatusNotCompleteException(const char* msg) {
-		this->msg = msg;
-	}
+	HTTPStatusParser::StatusNotCompleteException::StatusNotCompleteException(const string& msg) : msg(msg) {}
 	const char* HTTPStatusParser::StatusNotCompleteException::what() const throw() {
-		return msg;
+		return msg.c_str();
 	}
 
 	void HTTPStatusParser::setBuffer(const vector<char>& bufferContent) {

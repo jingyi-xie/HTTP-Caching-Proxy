@@ -71,8 +71,8 @@ public:
 				Log::testFail(TAG, "case <" + s + ">");
 				failFlag = true;
 			} 
-			catch(HTTPBadMessageException e) {}
-			catch(HTTPParserException e) {}
+			catch(const HTTPBadMessageException& e) {}
+			catch(const HTTPParserException& e) {}
 		}
 
 		vector<string> legalCases = {
@@ -106,11 +106,11 @@ public:
 					failFlag = true;	
 				}
 			} 
-			catch(HTTPBadMessageException e) {
+			catch(const HTTPBadMessageException& e) {
 				Log::testFail(TAG, Log::msg("case <" + legalCases[i] + ">, exception ", e.what(), ", ", i));
 				failFlag = true;
 			}
-			catch(HTTPParserException e) {
+			catch(const HTTPParserException& e) {
 				Log::testFail(TAG, Log::msg("case <" + legalCases[i] + ">, exception ", e.what(), ", ", i));
 				failFlag = true;
 			}
@@ -141,8 +141,8 @@ public:
 				failFlag = true;
 				Log::testFail(TAG, Log::msg("ILLEGAL CASE <", illegalCases[i], ">"));
 			} 
-			catch(HTTPParserException e) {}
-			catch(HTTPBadMessageException e) {}
+			catch(const HTTPParserException& e) {}
+			catch(const HTTPBadMessageException& e) {}
 		}
 
 
@@ -172,11 +172,11 @@ public:
 					}
 				}
 			} 
-			catch(HTTPParserException e) {
+			catch(const HTTPParserException& e) {
 				failFlag = true;
 				Log::testFail(TAG, Log::msg("exception: ", e.what()));
 			}
-			catch(HTTPBadMessageException e) {
+			catch(const HTTPBadMessageException& e) {
 				failFlag = true;
 				Log::testFail(TAG, Log::msg("exception: ", e.what()));
 			}
@@ -219,8 +219,8 @@ public:
 				failFlag = true;
 				Log::testFail(TAG, Log::msg("<", illegalCases[i], ">"));
 			}
-			catch(HTTPParserException e) {}
-			catch(HTTPBadMessageException e) {}
+			catch(const HTTPParserException& e) {}
+			catch(const HTTPBadMessageException& e) {}
 		}
 
 
@@ -262,11 +262,11 @@ public:
 					Log::testFail(TAG, "version");
 				}
 			} 
-			catch(HTTPParserException e) {
+			catch(const HTTPParserException& e) {
 				failFlag = true;
 				Log::testFail(TAG, Log::msg("exception: ", e.what()));
 			}
-			catch(HTTPBadMessageException e) {
+			catch(const HTTPBadMessageException& e) {
 				failFlag = true;
 				Log::testFail(TAG, Log::msg("exception: ", e.what()));
 			}
@@ -340,8 +340,8 @@ public:
 				failFlag = true;
 				Log::testFail(TAG, Log::msg("<", illegalCases[i], ">"));
 			}
-			catch(HTTPParserException e) {}
-			catch(HTTPBadMessageException e) {}
+			catch(const HTTPParserException& e) {}
+			catch(const HTTPBadMessageException& e) {}
 		}
 
 
@@ -383,11 +383,11 @@ public:
 					Log::testFail(TAG, "reason");
 				}
 			} 
-			catch(HTTPParserException e) {
+			catch(const HTTPParserException& e) {
 				failFlag = true;
 				Log::testFail(TAG, Log::msg("exception: ", e.what()));
 			}
-			catch(HTTPBadMessageException e) {
+			catch(const HTTPBadMessageException& e) {
 				failFlag = true;
 				Log::testFail(TAG, Log::msg("exception: ", e.what()));
 			}
@@ -464,7 +464,7 @@ void proxyTest() {
 				request = requestParser.build();
 				break;
 			} 
-			catch(HTTPParser::HTTPParserException e) {
+			catch(const HTTPParser::HTTPParserException& e) {
 				Log::verbose(Log::msg("While building request, HTTPParserException: ", e.what()));
 			}
 		}
@@ -498,7 +498,7 @@ void proxyTest() {
 				try {
 					resp = statusParser.build();
 					break;
-				} catch(HTTPParser::HTTPParserException e) {
+				} catch(const HTTPParser::HTTPParserException& e) {
 					Log::verbose(Log::msg("While parsing response: ", e.what()));
 					Log::verbose("Retry...");
 				}

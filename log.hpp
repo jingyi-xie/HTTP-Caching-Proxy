@@ -29,7 +29,7 @@ namespace zq29Inner {
 		static void _msg(stringstream& is, const T& arg, const Rest&... rest) {
 			try {
 				is << arg;
-			} catch(...) {/* ignore the case where operator<< might not be defined */ }
+			} catch(...) { warning("in function msg: operator<< undefined, ignore!"); }
 			_msg(is, rest...);
 		}
 
