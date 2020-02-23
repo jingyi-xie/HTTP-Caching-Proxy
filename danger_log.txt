@@ -1,1 +1,3 @@
 * request and response are matched based on non-encrypted filenames so can be easilly modified by rename the file
+
+* I now realised that I should keep track of the exception guarantee at the very beginning. it's hard to check it when a functino calls a ton of other functions whose exception guarantee was not clear

@@ -264,6 +264,7 @@ namespace zq29Inner {
 		 * some header fields may have the same filed name
 		 * but different value, so use set<pair<>>
 		*/
+		// WHY I DID NOT USE MAP HERE???
 		set<pair<string, string>> headerFields;
 
 		string messageBody;
@@ -282,6 +283,7 @@ namespace zq29Inner {
 			string method;
 			string requestTarget;
 			string httpVersion;
+			bool operator==(const RequestLine& rhs) const;
 		};
 
 		HTTPRequest();
@@ -289,6 +291,7 @@ namespace zq29Inner {
 			const set<pair<string, string>>& h, const string& m);
 
 		virtual string toStr() const override;
+		bool operator==(const HTTPRequest& rhs) const;
 
 		RequestLine requestLine;
 	};
@@ -301,6 +304,7 @@ namespace zq29Inner {
 			string httpVersion;
 			string statusCode;
 			string reasonPhrase;
+			bool operator==(const StatusLine& rhs) const;
 		};
 
 		HTTPStatus();
@@ -308,6 +312,7 @@ namespace zq29Inner {
 			const set<pair<string, string>>& h, const string& m);
 
 		virtual string toStr() const override;
+		bool operator==(const HTTPStatus& rhs) const;
 
 		StatusLine statusLine;
 	};
@@ -597,6 +602,13 @@ namespace zq29Inner {
 	/////////////////////////////////////////////////////////////////////////////////
 	//////////////////////////// HTTPRequest Implementation /////////////////////////
 	/////////////////////////////////////////////////////////////////////////////////
+	bool HTTPRequest::RequestLine::operator==(const HTTPRequest::RequestLine& rhs) const {
+		return (method == rhs.method &&
+			requestTarget == rhs.requestTarget &&
+			httpVersion == rhs.httpVersion
+			);
+	}
+
 	HTTPRequest::HTTPRequest() {}
 	HTTPRequest::HTTPRequest(const RequestLine& r, 
 		const set<pair<string, string>>& h, const string& m) :
@@ -616,10 +628,22 @@ namespace zq29Inner {
 		return ss.str();
 	}
 
+	bool HTTPRequest::operator==(const HTTPRequest& rhs) const {
+		return (headerFields == rhs.headerFields &&
+			messageBody == rhs.messageBody &&
+			requestLine == rhs.requestLine);
+	}
+
 
 	/////////////////////////////////////////////////////////////////////////////////
 	//////////////////////////// HTTPStatus Implementation //////////////////////////
 	/////////////////////////////////////////////////////////////////////////////////
+	bool HTTPStatus::StatusLine::operator==(const HTTPStatus::StatusLine& rhs) const {
+		return (httpVersion == rhs.httpVersion &&
+			statusCode == rhs.statusCode &&
+			reasonPhrase == rhs.reasonPhrase);
+	}
+
 	HTTPStatus::HTTPStatus() {}
 	HTTPStatus::HTTPStatus(const StatusLine& s, 
 		const set<pair<string, string>>& h, const string& m) :
@@ -637,6 +661,12 @@ namespace zq29Inner {
 		ss << "\r\n";
 		ss << messageBody;
 		return ss.str();
+	}
+
+	bool HTTPStatus::operator==(const HTTPStatus& rhs) const {
+		return (headerFields == rhs.headerFields &&
+			messageBody == rhs.messageBody &&
+			statusLine == rhs.statusLine);
 	}
 
 

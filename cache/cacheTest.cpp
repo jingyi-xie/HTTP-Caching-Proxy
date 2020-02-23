@@ -88,8 +88,22 @@ void testHTTPProxyCacheBasic() {
 	if(!failFlag) { Log::testSuccess(TAG); }
 }
 
+void testTime() {
+	const string TAG = "testTime";
+	const string timeStr = "Sun, 23 Feb 2020 08:49:37 GMT";
+	int time = HTTPSemantics::dateStrToSeconds(timeStr);
+	if(time < 0) {
+		Log::testFail(TAG, "HTTPSemantics::dateStrToSeconds failed");
+	} else {
+		//Log::verbose(Log::msg("HTTPSemantics::dateStrToSeconds got ", time));
+		Log::testSuccess(TAG);
+	}
+
+}
+
 int main() {
 	testCacheBasic();
 	//testCacheRemoveAll();
 	testHTTPProxyCacheBasic();
+	testTime();
 }
