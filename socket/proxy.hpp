@@ -62,17 +62,22 @@ private:
       HTTPRequestParser requestParser;
       HTTPRequest request;
       requestParser.setBuffer(vector<char>(buffer, buffer + len));
-      request = requestParser.build();
+      try {
+         request = requestParser.build();
+      }
+      catch(const HTTPParser::HTTPParserException& e) {
+        //   cerr << "While building request, HTTPParserException: " << e.what();
+      }
       if(request.requestLine.method == "CONNECT") {
          auto af = HTTPRequestParser::parseAuthorityForm(request);
          int server_fd = connectServer(af.host.c_str(), af.port.c_str());
          if (server_fd == -1) {
             cerr << "Error: cannot connect to server" << endl;
-            exit(EXIT_FAILURE);
+            return;
          }
          if (send(client_fd, "HTTP/1.1 200 OK\r\n\r\n", 19, 0) == -1) {
             cerr << "CONNECT: sent 200 OK to client" << endl;
-            exit(EXIT_FAILURE);
+            return;
          }
          char msg_buffer[bufferSize];
          while(true) {
@@ -81,7 +86,7 @@ private:
             FD_SET(server_fd, &readfds);
             FD_SET(client_fd, &readfds);
             select(max(server_fd, client_fd) + 1, &readfds, NULL, NULL, NULL);
-            int ready_fd;
+            int ready_fd; 
             int other_fd;
             if (FD_ISSET(server_fd, &readfds)) {  // first priority (terminating signal)
                ready_fd = server_fd;
@@ -94,14 +99,14 @@ private:
             int msg_len = recv(ready_fd, msg_buffer, sizeof(msg_buffer), 0);
             if (msg_len == -1) {
                cerr << "CONNECT: receive data" << endl;
-               exit(EXIT_FAILURE);
+               break;
             }
             else if (msg_len == 0) {
                break;
             }
             if (send(other_fd, msg_buffer, msg_len, MSG_NOSIGNAL) == -1) {
                cerr << "CONNECT: send data" << endl;
-               exit(EXIT_FAILURE);
+               break;
             }
          }        
          close(client_fd);
