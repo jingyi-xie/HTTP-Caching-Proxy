@@ -257,25 +257,6 @@ namespace zq29Inner {
 		//string sizeToHexStr(const size_t s);
 	}
 
-	/*
-	 * shortcut functions
-	 * 
-	 * sc stands for shortcut
-	*/
-	namespace sc {
-		/*
-		 * build HTML string from a HTTP 400 Bad Request error
-		*/
-		string getHTTP400HTMLStr(const string& error);
-
-		/*
-		 * hack the status HTML string, add "<h1>zq29 HTTP Cache Proxy</h1>"
-		 * if no <body> tag, do nothing
-		*/
-		string hackStatusHTML(string html);
-	}
-
-
 
 	class HTTPMessage {
 	public:
@@ -290,7 +271,7 @@ namespace zq29Inner {
 		HTTPMessage();
 		HTTPMessage(const set<pair<string, string>>& h, const string& m);
 
-		virtual string toStr() = 0;
+		virtual string toStr() const = 0;
 	};
 
 
@@ -307,7 +288,7 @@ namespace zq29Inner {
 		HTTPRequest(const RequestLine& r, 
 			const set<pair<string, string>>& h, const string& m);
 
-		virtual string toStr() override;
+		virtual string toStr() const override;
 
 		RequestLine requestLine;
 	};
@@ -326,7 +307,7 @@ namespace zq29Inner {
 		HTTPStatus(const StatusLine& s, 
 			const set<pair<string, string>>& h, const string& m);
 
-		virtual string toStr() override;
+		virtual string toStr() const override;
 
 		StatusLine statusLine;
 	};
@@ -547,6 +528,37 @@ namespace zq29Inner {
 	};
 
 
+	/*
+	 * shortcut functions
+	 * 
+	 * sc stands for shortcut
+	*/
+	namespace sc {
+		/*
+		 * build HTML string from a HTTP 400 Bad Request error
+		*/
+		string getHTTP400HTMLStr(const string& error);
+
+		/*
+		 * hack the status HTML string, add "<h1>zq29 HTTP Cache Proxy</h1>"
+		 * if no <body> tag, do nothing
+		*/
+		string hackStatusHTML(string html);
+
+		/*
+		 * works as its name suggests
+		 * any exceptions thown will be catched and treated
+		 * as failure to build the object, in which case
+		 * an HTTPStatus() is returned
+		 *
+		 * exception guarantee: no throw
+		*/
+		HTTPStatus buildStatusFromStr(const string& str);
+	}
+
+
+
+
 
 
 
@@ -590,7 +602,7 @@ namespace zq29Inner {
 		const set<pair<string, string>>& h, const string& m) :
 		HTTPMessage(h, m), requestLine(r) {}
 
-	string HTTPRequest::toStr() {
+	string HTTPRequest::toStr() const {
 		stringstream ss;
 		ss << requestLine.method << " "
 			<< requestLine.requestTarget << " "
@@ -613,7 +625,7 @@ namespace zq29Inner {
 		const set<pair<string, string>>& h, const string& m) :
 		HTTPMessage(h, m), statusLine(s) {}
 
-	string HTTPStatus::toStr() {
+	string HTTPStatus::toStr() const {
 		stringstream ss;
 		ss << statusLine.httpVersion << " "
 			<< statusLine.statusCode << " "
@@ -1245,6 +1257,19 @@ namespace zq29Inner {
 		html.insert(sp + 6, "<h1>zq29 HTTP Cache Proxy</h1>");
 		cout << "Hacked! proof: " << html.substr(sp, 50);
 		return html;
+	}
+
+	HTTPStatus sc::buildStatusFromStr(const string& str) {
+		try {
+			vector<char> buffer(str.begin(), str.end());
+
+			HTTPStatusParser p;
+			p.setBuffer(buffer);
+			return p.build();
+		} catch(const exception& e) {
+			Log::debug(e.what());
+		}
+		return HTTPStatus();
 	}
 
 }

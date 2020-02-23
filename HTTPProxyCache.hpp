@@ -11,6 +11,8 @@
 #include <assert.h>
 
 #include "log.hpp"
+#include "cache.hpp"
+#include "httpparser/httpparser.hpp"
 
 namespace zq29 {
 namespace zq29Inner {
@@ -37,7 +39,14 @@ namespace zq29Inner {
 		 * save request and response
 		 * return the id assigned to them
 		*/
-		string save()
+		string save(const HTTPRequest& req, const HTTPStatus& sta);
+
+		/*
+		 * get HTTP status string by HTTP request
+		 * return HTTPStatus() when no match or faild to parse match
+		 * which is rare but possiily because of modification of files
+		*/
+		HTTPStatus getStaStrByReq(const HTTPRequest& req) const;
 
 	private:
 
@@ -53,7 +62,9 @@ namespace zq29Inner {
 		const string DELIM = "_";
 		const string REQ_ID_PREFIX = "request" + DELIM;
 		const string STA_ID_PREFIX = "response" + DELIM;
-		string getIdByFilename(const string& filename);
+		string getIdByFilename(const string& filename) const;
+		string getReqName(const string& id) const;
+		string getStaName(const string& id) const;
 
 		/*
 		 * maintains a pool of available ids
@@ -101,6 +112,27 @@ namespace zq29Inner {
 		return createInstance("whatever", true);
 	}
 
+	string HTTPProxyCache::save(const HTTPRequest& req, const HTTPStatus& sta) {
+		assert(idPool.size() > 0);
+		const string id = *(idPool.begin());
+		
+		Cache::save(getReqName(id), req.toStr());
+		Cache::save(getStaName(id), sta.toStr());
+
+		// erase after successfully save
+		idPool.erase(idPool.begin());
+		if(idPool.size() == 0) {
+			updateIdPool();
+		}
+		return id;
+	}
+
+	HTTPStatus HTTPProxyCache::getStaStrByReq(const HTTPRequest& req) const {
+		const string id = getIdByMsg(req.toStr());
+		if(id == noid) { return HTTPStatus(); }
+		return buildStatusFromStr(getMsgById(getStaName(id)));
+	}
+
 	HTTPProxyCache::HTTPProxyCache(const fs::path& p) :
 		Cache(p)
 	{
@@ -108,10 +140,17 @@ namespace zq29Inner {
 		initd = true;
 	}
 
-	string HTTPProxyCache::getIdByFilename(const string& filename) {
+	string HTTPProxyCache::getIdByFilename(const string& filename) const {
 		const size_t sp = filename.find(DELIM);
 		if(sp == string::npos) { return noid; }
 		return filename.substr(sp + 1, string::npos);
+	}
+
+	string HTTPProxyCache::getReqName(const string& id) const {
+		return REQ_ID_PREFIX + DELIM + id;
+	}
+	string HTTPProxyCache::getStaName(const string& id) const {
+		return STA_ID_PREFIX + DELIM + id;
 	}
 
 	void HTTPProxyCache::updateIdPool(const size_t expectedCount) {

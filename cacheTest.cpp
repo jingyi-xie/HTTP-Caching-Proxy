@@ -1,5 +1,6 @@
 #include <iostream>
 #include "cache.hpp"
+#include "httpproxycache.hpp"
 using namespace zq29;
 using namespace std;
 
