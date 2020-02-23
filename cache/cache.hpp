@@ -10,7 +10,7 @@
 #include <set>
 #include <assert.h>
 
-#include "log.hpp"
+#include "../log.hpp"
 
 namespace zq29 {
 namespace zq29Inner {

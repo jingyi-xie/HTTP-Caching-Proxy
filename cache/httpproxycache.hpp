@@ -10,9 +10,9 @@
 #include <set>
 #include <assert.h>
 
-#include "log.hpp"
+#include "../log.hpp"
 #include "cache.hpp"
-#include "httpparser/httpparser.hpp"
+#include "../httpparser/httpparser.hpp"
 
 namespace zq29 {
 namespace zq29Inner {
