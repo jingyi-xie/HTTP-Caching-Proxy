@@ -68,7 +68,25 @@ private:
       catch(const HTTPParser::HTTPParserException& e) {
         //   cerr << "While building request, HTTPParserException: " << e.what();
       }
-      if(request.requestLine.method == "CONNECT") {
+      if (request.requestLine.method == "GET" || request.requestLine.method == "POST") {
+         HTTPRequestParser::AbsoluteForm af = HTTPRequestParser::parseAbsoluteForm(request);
+         const char* addr = af.authorityForm.host.c_str();
+			const char* port = af.authorityForm.port == "" ? "80" : af.authorityForm.port.c_str();
+         int server_fd = connectServer(addr, port);
+         if (send(server_fd, request.toStr().c_str(), request.toStr().length(), MSG_NOSIGNAL) == -1) {
+            cerr << "Error: send request to server" << endl;
+            return;
+         }
+         char response_buffer[bufferSize];
+         int msg_len = recv(server_fd, response_buffer, sizeof(response_buffer), 0);
+         send(client_fd, response_buffer, msg_len, MSG_NOSIGNAL);
+         while ((msg_len = recv(server_fd, response_buffer, sizeof(response_buffer), 0)) > 0) {
+            send(client_fd, response_buffer, msg_len, MSG_NOSIGNAL);
+         }
+         close(client_fd);
+         close(server_fd);
+      }
+      else if(request.requestLine.method == "CONNECT") {
          auto af = HTTPRequestParser::parseAuthorityForm(request);
          int server_fd = connectServer(af.host.c_str(), af.port.c_str());
          if (server_fd == -1) {
