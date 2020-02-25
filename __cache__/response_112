@@ -1,0 +1,12 @@
+HTTP/1.1 200 OK
+Connection: keep-alive
+Content-Type: text/html; charset=gb2312
+Date: Tue, 25 Feb 2020 21:34:56 GMT
+Server: nginx
+Set-Cookie: ppmdig=15826664960000008281e47c89e0a6a24b0aad8211462d8f; path=/; HttpOnly
+Transfer-Encoding: chunked
+X-Powered-By: PHP/7.1.10
+
+a
+{"kick":0}
+0

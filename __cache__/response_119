@@ -1,0 +1,18 @@
+HTTP/1.1 200 OK
+AppEx-Activity-Id: 85940f3d-b5d8-4749-ab55-80f8b8c4e1ba
+Cache-Control: public, max-age=51
+Connection: close
+Content-Length: 1197
+Content-Type: text/xml; charset=utf-8
+Date: Tue, 25 Feb 2020 22:19:59 GMT
+ETag: "959399654"
+Server: Microsoft-IIS/8.5
+X-AspNet-Version: 4.0.30319
+X-CMS-ExecutionTimeInMilliseconds: 11
+X-CS-DocVersions: |cms-amp-AAopRm|174|
+X-Diagnostic-DC: eastus
+X-Diagnostic-S: Content_IN_31
+X-Powered-By: ASP.NET
+X-Trace-Context: {"ActivityId":"85940f3d-b5d8-4749-ab55-80f8b8c4e1ba"}
+
+<?xml version="1.0" encoding="utf-8"?><tile><visual addImageQuery="true" baseUri="http://img-s-msn-com.akamaized.net/tenant/amp/entityid/"><binding template="TileMedium" branding="nameAndLogo" arguments="contentID=BBZZleh" hint-overlay="50"><image placement="background" src="BBZZe8V.img?w=100&amp;h=100&amp;m=6&amp;tilesize=medium&amp;x=2728&amp;y=1082" /><text hint-wrap="true">数字化转型中的足球商业“帝国”——探访巴塞罗那俱乐部</text></binding><binding template="TileWide" branding="nameAndLogo" arguments="contentID=BBZZleh" hint-overlay="50"><image placement="background" src="BBZZe8V.img?w=204&amp;h=100&amp;m=6&amp;tilesize=wide&amp;x=2728&amp;y=1082" /><text hint-style="body" hint-wrap="true">数字化转型中的足球商业“帝国”——探访巴塞罗那俱乐部</text></binding><binding template="TileLarge" branding="nameAndLogo" arguments="contentID=BBZZleh" hint-overlay="50"><image placement="background" src="BBZZe8V.img?w=204&amp;h=204&amp;m=6&amp;tilesize=large&amp;x=2728&amp;y=1082" /><text hint-style="subtitle" hint-wrap="true">数字化转型中的足球商业“帝国”——探访巴塞罗那俱乐部</text></binding></visual></tile>

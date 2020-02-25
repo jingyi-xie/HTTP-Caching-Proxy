@@ -312,6 +312,7 @@ namespace zq29Inner {
 			const set<pair<string, string>>& h, const string& m);
 
 		virtual string toStr() const override;
+		string headerToStr() const;
 		bool operator==(const HTTPStatus& rhs) const;
 
 		StatusLine statusLine;
@@ -660,6 +661,19 @@ namespace zq29Inner {
 		}
 		ss << "\r\n";
 		ss << messageBody;
+		return ss.str();
+	}
+
+	string HTTPStatus::headerToStr() const {
+		stringstream ss;
+		ss << statusLine.httpVersion << " "
+			<< statusLine.statusCode << " "
+			<< statusLine.reasonPhrase << "\r\n";
+		for(auto const& e : headerFields) {
+			ss << e.first << ": "
+				<< e.second << "\r\n";
+		}
+		ss << "\r\n";
 		return ss.str();
 	}
 
@@ -1041,7 +1055,9 @@ namespace zq29Inner {
 		parseRequestLine();
 		parseHeaderFields(); // from parent class
 		parseMessageBody(); // from parent class
-		return HTTPRequest(requestLine, headerFields, messageBody);
+		const HTTPRequest req(requestLine, headerFields, messageBody);
+		Log::verbose("Successfully build request:\n" + req.toStr());
+		return req;
 	}
 
 	HTTPRequestParser::AuthorityForm HTTPRequestParser::parseAuthorityForm(const string& str, bool isConnect) {
@@ -1249,7 +1265,9 @@ namespace zq29Inner {
 		parseStatusLine();
 		parseHeaderFields(); // from parent class
 		parseMessageBody(); // from parent class
-		return HTTPStatus(statusLine, headerFields, messageBody);
+		const HTTPStatus result(statusLine, headerFields, messageBody);
+		Log::verbose("Successfully build status with header:\n" + result.headerToStr());
+		return result;
 	}
 
 

@@ -45,6 +45,10 @@ namespace zq29Inner {
 			cout << "\033[1;33m" << msg << "\033[0m" << endl;
 		}
 
+		static void __printCyanNoLock(const string& msg) {
+			cout << "\033[0;36m" << msg << "\033[0m" << endl;
+		}
+
 	public:
 		template<typename... T>
 		static string msg(T... args) {
@@ -78,7 +82,7 @@ namespace zq29Inner {
 		static void debug(const string& msg) {
 			if(__debug) {
 				lock_guard<mutex> lck(printLock);
-				cout << "***DEBUG***: " << msg << endl;
+				__printCyanNoLock(Log::msg("***DEBUG***: ", msg));
 			}
 		}
 

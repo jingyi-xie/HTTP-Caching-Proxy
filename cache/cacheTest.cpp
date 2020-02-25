@@ -1,8 +1,12 @@
 #include <iostream>
+#include <fstream>
+
 #include "cache.hpp"
 #include "httpproxycache.hpp"
+
 using namespace zq29;
 using namespace std;
+namespace fs = std::filesystem;	
 
 void testCacheBasic() {
 	const string TAG = "testCacheBasic";
@@ -98,12 +102,27 @@ void testTime() {
 		//Log::verbose(Log::msg("HTTPSemantics::dateStrToSeconds got ", time));
 		Log::testSuccess(TAG);
 	}
-
 }
+
+
+void testGetStaByReq() {
+	const string TAG = "testGetStaByReq";
+	HTTPRequest::RequestLine line;
+	line.method = "GET";
+	line.requestTarget = "http://qianzuncheng.com/";
+	line.httpVersion = "HTTP/1.1";
+	auto res = HTTPProxyCache::getInstance().getStaByReq(line);
+	//Log::verbose(Log::msg(TAG, ": <", res.id, ">"));
+	ofstream ofs("test.txt");
+	ofs << res.s.toStr();
+	ofs.close();
+}
+
 
 int main() {
 	testCacheBasic();
 	//testCacheRemoveAll();
 	testHTTPProxyCacheBasic();
 	testTime();
+	testGetStaByReq();
 }

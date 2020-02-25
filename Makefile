@@ -1,6 +1,11 @@
 CPPFLAGS=-Wall -Werror -pedantic -std=c++17 -g
 COMMON=log.hpp
 
+all: main tests
+
+main: main.cpp
+	g++-9.1 $(CPPFLAGS) main.cpp -o main -lpthread
+
 tests: httpparserTest cacheTest proxy_main
 
 proxy_main: socket/proxy_main.cpp socket/proxy.hpp
@@ -13,4 +18,4 @@ cacheTest: cache/cacheTest.cpp cache/cache.hpp $(COMMON)
 	g++-9.1 $(CPPFLAGS) cache/cacheTest.cpp -o cacheTest
 
 clean:
-	rm httpparserTest cacheTest proxy_main
+	rm main httpparserTest cacheTest proxy_main

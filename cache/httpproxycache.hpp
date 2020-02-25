@@ -23,6 +23,22 @@ namespace zq29Inner {
 	namespace fs = std::filesystem;
 
 	/*
+	 * C++ did really stupid in time convert
+	 * it uses different clocks for different time
+	 * which makes it hard to convert
+	 * this is a helper function to convert a
+	 * time_point to a time_t
+	*/
+	template <typename TimePoint>
+	time_t toTimeT(const TimePoint& tp) {
+		auto temp = chrono::time_point_cast<chrono::system_clock::duration>(
+				tp - TimePoint::clock::now()
+				+ chrono::system_clock::now()
+			);
+		return chrono::system_clock::to_time_t(temp);
+	}
+
+	/*
 	 * a class with several helpers functions
 	 * which help us understand the semantics of an HTTP message
 	*/
@@ -90,6 +106,7 @@ namespace zq29Inner {
 
 		/*
 		 * save request and response
+		 * if request already exists, then update
 		 * return the id assigned to them
 		*/
 		string save(const HTTPRequest& req, const HTTPStatus& sta);
@@ -109,15 +126,16 @@ namespace zq29Inner {
 			 * <action value>: things you supposed to do
 			 * 0: good, reply to client with <resp>
 			 * 1: cache miss, go talk to the server
-			 * 2. cache "hit", but need re-validation
+			 * 2. cache "hit", but need re-validation, send <validtionReq> to server
 			 * 
 			*/
 			int action;
 			HTTPStatus resp;
+			HTTPRequest validationReq;
 		};
-		ConsRespResult constructResponses(const HTTPRequest& req);
+		ConsRespResult constructResponse(const HTTPRequest& req);
 
-	private:
+	public: // TODO: for testing
 
 		HTTPProxyCache(const fs::path& p);
 		/*
@@ -129,8 +147,8 @@ namespace zq29Inner {
 		 * filename format: <PREFIX DELIM ID>
 		*/
 		const string DELIM = "_";
-		const string REQ_ID_PREFIX = "request" + DELIM;
-		const string STA_ID_PREFIX = "response" + DELIM;
+		const string REQ_ID_PREFIX = "request";
+		const string STA_ID_PREFIX = "response";
 		string getIdByFilename(const string& filename) const;
 		string getReqName(const string& id) const;
 		string getStaName(const string& id) const;
@@ -163,8 +181,17 @@ namespace zq29Inner {
 		 * which is rare but possiily because of modification of files
 		 *
 		 * exception: no throw (but may throw when system lib fails which is rare)
+		 *
+		 * only when if id != noid, the result is valid! because of the exception thing
 		*/
-		HTTPStatus getStaStrByReq(const HTTPRequest::RequestLine& requestLine) const;
+		struct GetStaResult {
+			string id;
+			HTTPStatus s;
+			time_t respTime;
+		};
+		GetStaResult getStaByReq(const HTTPRequest::RequestLine& requestLine) const;
+
+		HTTPRequest buildValidationRequest(const HTTPRequest& req, const HTTPStatus& sta) const;
 
 	};
 	bool HTTPProxyCache::initd = false;
@@ -228,11 +255,32 @@ namespace zq29Inner {
 	}
 
 	int HTTPSemantics::dateStrToSeconds(const string& s) {
-		tm timeStru;
+		tm timeStru = { 0 };
+		istringstream ss(s);
+		const time_t rawTime = time(0);
+		const int offset = timegm(localtime(&rawTime)) - rawTime;
+		// Date: Tue, 25 Feb 2020 18:46:47 GMT
+		if(!(ss >> get_time(&timeStru, "%a, %d %b %Y %H:%M:%S %Z"))) {
+			return -1;
+		}
+
+		/*
 		if(strptime(
 			s.c_str(), "%a, %d %b %Y %H:%M:%S %Z", &timeStru
 		) == nullptr) {	return -1; }
-		return (int)mktime(&timeStru);
+		Log::debug(Log::msg(
+			"sec:", timeStru.tm_sec,
+			", min:", timeStru.tm_min,
+			", hour:", timeStru.tm_hour,
+			", mday:", timeStru.tm_mday,
+			", mon:", timeStru.tm_mon,
+			", year:", timeStru.tm_year,
+			", wday:", timeStru.tm_wday,
+			", yday:", timeStru.tm_yday,
+			", isdst:", timeStru.tm_isdst
+		));
+		*/
+		return (int)mktime(&timeStru) + offset ;
 	}
 
 	int HTTPSemantics::getFreshnessLifetime(const HTTPStatus& sta) {
@@ -276,8 +324,8 @@ namespace zq29Inner {
 				return expireTime - dateTime;
 			}
 		}
-		// rule 4: heuristic freshness = 100s in this case
-		static const int heuristicFreshness = 100;
+		// rule 4: heuristic freshness
+		static const int heuristicFreshness = 3600 * 24; // one day
 		return heuristicFreshness;
 	}
 
@@ -307,6 +355,11 @@ namespace zq29Inner {
 	bool HTTPSemantics::isRespFresh(const HTTPStatus& sta, const time_t respTime) {
 		const int lifetime = getFreshnessLifetime(sta);
 		const int age = getAge(sta, respTime);
+		Log::debug(Log::msg(
+			"in isRespFresh(): freshness <", lifetime, ">, ",
+			"age <", age, ">, isFresh <", 
+			(lifetime > 0 && age > 0 && lifetime > age), ">"
+		));
 		if(lifetime < 0 || age < 0) { return false; }
 		return (lifetime > age);
 	}
@@ -336,24 +389,32 @@ namespace zq29Inner {
 
 	string HTTPProxyCache::save(const HTTPRequest& req, const HTTPStatus& sta) {
 		assert(idPool.size() > 0);
-		const string id = *(idPool.begin());
+		
+		auto result = getStaByReq(req.requestLine);
+		// if already exists, update
+		const string id = (result.id == noid ? *(idPool.begin()) : result.id);
 		
 		Cache::save(getReqName(id), req.toStr());
 		Cache::save(getStaName(id), sta.toStr());
+		Log::debug("Yeah! New pair in cache!");
 
 		// erase after successfully save
-		idPool.erase(idPool.begin());
+		if(id != noid) { idPool.erase(idPool.begin()); }
 		if(idPool.size() == 0) {
 			updateIdPool();
 		}
 		return id;
 	}
 
-	HTTPProxyCache::ConsRespResult HTTPProxyCache::constructResponses(const HTTPRequest& req) {
+	HTTPProxyCache::ConsRespResult HTTPProxyCache::constructResponse(const HTTPRequest& req) {
 		ConsRespResult result;
+		const GetStaResult r = getStaByReq(req.requestLine);
+		const HTTPStatus& resp = r.s;
+		const time_t respTime = r.respTime;
+
 		// rule 1: URI
-		HTTPStatus resp = getStaStrByReq(req.requestLine);
 		if(resp == HTTPStatus()) { // cache miss
+			Log::debug("Cache miss");
 			result.action = 1;
 			return result;
 		}
@@ -372,18 +433,41 @@ namespace zq29Inner {
 		// rule 4: [PARTIALLY BROKEN], no support for pragma since it is HTTP 1.0
 		for(auto const& e : req.headerFields) {
 			if(e.first == "Cache-Control" && e.second == "no-cache") {
+				Log::debug("in constructResponses: request has 'no-cache'");
 				result.action = 2;
+				result.resp = resp;
+				result.validationReq = buildValidationRequest(req, resp);
+				return result;
 			}
 		}
 
 		// rule 5
 		for(auto const& e : resp.headerFields) {
 			if(e.first == "Cache-Control" && e.second == "no-cache") {
+				Log::debug("in constructResponses: response has 'no-cache'");
 				result.action = 2;
+				result.validationReq = buildValidationRequest(req, resp);
+				return result;
 			}
 		}
 
-		// TODO:
+		// rule 6.1
+		if(HTTPSemantics::isRespFresh(resp, respTime)) {
+			Log::debug("in constructResponses: response is fresh");
+			result.action = 0;
+			result.resp = resp;
+			return result;
+		} else if(false) { // rule 6.2
+			// [BROKEN]: NEVER allowed to be served stale
+		} else {
+			Log::debug("in constructResponses: rule 6.2 go re-validation");
+			result.action = 2;
+			result.validationReq = buildValidationRequest(req, resp);
+			return result;
+		}
+		
+		Log::debug("in constructResponses: no rule matched, no response constructed");
+		result.action = 1;
 		return result;
 	}
 
@@ -445,8 +529,13 @@ namespace zq29Inner {
 		updateIdPool();
 	}
 
-	HTTPStatus HTTPProxyCache::getStaStrByReq(const HTTPRequest::RequestLine& requestLine) const {
-		if(!is_directory(wdir)) { return HTTPStatus(); }
+	HTTPProxyCache::GetStaResult HTTPProxyCache::getStaByReq(const HTTPRequest::RequestLine& requestLine) const {
+		GetStaResult result;
+		result.id = noid;
+		result.s = HTTPStatus();
+		result.respTime = 0;
+
+		if(!is_directory(wdir)) { return result; }
 		stringstream ss;
 		ss << requestLine.method << " " 
 			<< requestLine.requestTarget << " "
@@ -458,15 +547,46 @@ namespace zq29Inner {
 			string str;
 			getline(ifs, str);
 			ifs.close();
+			if(str[str.length() - 1] == '\r') {
+				str = str.substr(0, str.length() - 1); // get rid of '\r'
+			}
 			if(str == requestLineStr) {
 				const string id = getIdByFilename(file.path().filename());
-				if(id == noid) { return HTTPStatus(); }
-				return buildStatusFromStr(getMsgById(getStaName(id)));
+				if(id == noid) { return result; }
+				//fs::file_time_type t;
+				try {
+					const auto ftime = fs::last_write_time(file.path());
+					result.respTime = toTimeT(ftime);
+					result.s = buildStatusFromStr(getMsgById(getStaName(id)));
+					result.id = id;
+					return result;
+				} catch(const fs::filesystem_error& e) {
+					Log::warning(Log::msg("While fetching resp in cache: ", e.what()));
+					return result;
+				}
+				
 			}
 		}
-		return HTTPStatus();
+		return result;
 	}
 
+	HTTPRequest HTTPProxyCache::buildValidationRequest(const HTTPRequest& req, const HTTPStatus& sta) const {
+		HTTPRequest result(req);
+		auto const headerFields = result.headerFields;
+		for(auto const& e : headerFields) {
+			if(e.first == "ETag") {
+				result.headerFields.insert(make_pair(
+					"If-None-Match", e.second
+				));
+			}
+			if(e.first == "Last-Modified") {
+				result.headerFields.insert(make_pair(
+					"If-Modified-Since", e.second
+				));
+			}
+		}
+		return result;
+	}
 
 }
 	

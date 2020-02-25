@@ -1,0 +1,5 @@
+GET http://tile-service.weather.microsoft.com/zh-CN/livetile/preinstall?region=CN&appid=C98EA5B0842DBB9405BBF071E1DA76512D21FE36&FORM=Threshold HTTP/1.1
+Host: tile-service.weather.microsoft.com
+Proxy-Connection: Keep-Alive
+User-Agent: Microsoft-WNS/10.0
+
