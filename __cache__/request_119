@@ -1,5 +1,0 @@
-GET http://cdn.content.prod.cms.msn.com/singletile/summary/alias/experiencebyname/today?market=zh-CN&source=appxmanifest&tenant=amp&vertical=sports HTTP/1.1
-Host: cdn.content.prod.cms.msn.com
-Proxy-Connection: Keep-Alive
-User-Agent: Microsoft-WNS/10.0
-

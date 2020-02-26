@@ -1,7 +1,0 @@
-GET http://profile.pinyin.sogou.com/download.php?filename=sgim_usrzone.zip&h=9577EC57956E17E5BD7B88642D79A6CD&v=9.3.0.3129&ifauto=1 HTTP/1.1
-Cookie: pprdig=MmlNYryZTIquta1uc67rOttsCBVOd0g4CCNsqLAcxi6h-KJsnPOd_NtMx0dH40Y0l6cZwylB4UPskqn6a7KFH8dUhjfCkvE4RpLjKIRcczTZw8yom9Qm_I_EhjVOTE5NtSiZJXud5Z1lj1Ox2nOuF6h1WUqA6KaYJe5LrubCtaY; ppinf=5|1582666492|1583876092|dHJ1c3Q6MToxfGNsaWVudGlkOjQ6MTA0NHx1bmlxbmFtZTozMjo3NEMxMkFEODgyNUExNDc1QkFFMzA2QjYwOTNGREQzOXxjcnQ6MTA6MTU4MjY2NjQ5MnxyZWZuaWNrOjA6fHVzZXJpZDo0NDo3NEMxMkFEODgyNUExNDc1QkFFMzA2QjYwOTNGREQzOUBxcS5zb2h1LmNvbXw
-Host: profile.pinyin.sogou.com
-Pragma: no-cache
-Proxy-Connection: Keep-Alive
-User-Agent: sogou_ime/9.3.0.3129
-

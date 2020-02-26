@@ -284,6 +284,7 @@ namespace zq29Inner {
 			string requestTarget;
 			string httpVersion;
 			bool operator==(const RequestLine& rhs) const;
+			string toStr() const;
 		};
 
 		HTTPRequest();
@@ -305,6 +306,7 @@ namespace zq29Inner {
 			string statusCode;
 			string reasonPhrase;
 			bool operator==(const StatusLine& rhs) const;
+			string toStr() const;
 		};
 
 		HTTPStatus();
@@ -605,6 +607,14 @@ namespace zq29Inner {
 	/////////////////////////////////////////////////////////////////////////////////
 	//////////////////////////// HTTPRequest Implementation /////////////////////////
 	/////////////////////////////////////////////////////////////////////////////////
+	string HTTPRequest::RequestLine::toStr() const {
+		stringstream ss;
+		ss << method << " "
+			<< requestTarget << " "
+			<< httpVersion;
+		return ss.str();
+	}
+
 	bool HTTPRequest::RequestLine::operator==(const HTTPRequest::RequestLine& rhs) const {
 		return (method == rhs.method &&
 			requestTarget == rhs.requestTarget &&
@@ -645,6 +655,13 @@ namespace zq29Inner {
 		return (httpVersion == rhs.httpVersion &&
 			statusCode == rhs.statusCode &&
 			reasonPhrase == rhs.reasonPhrase);
+	}
+	string HTTPStatus::StatusLine::toStr() const {
+		stringstream ss;
+		ss << httpVersion << " "
+			<< statusCode << " "
+			<< reasonPhrase;
+		return ss.str();
 	}
 
 	HTTPStatus::HTTPStatus() {}

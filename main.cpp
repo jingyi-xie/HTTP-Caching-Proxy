@@ -1,3 +1,6 @@
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <sys/time.h>
@@ -25,6 +28,17 @@ class Proxy {
 private:
 	int listen_fd;
 	char port_num[NI_MAXSERV];
+
+   string getPeerIpBySocket(const int socketFd) {
+      sockaddr_in sin;
+      socklen_t len = sizeof(sin);
+      if (getpeername(socketFd, (sockaddr*) &sin, &len) < 0) {
+         return "unknown IP";
+      }
+      char ipStr[INET_ADDRSTRLEN];
+      inet_ntop(AF_INET, &sin.sin_addr, ipStr, sizeof(ipStr));
+      return string(ipStr);
+   }
 
 	void sendAll(const int socketFd, const char* const buffer, const size_t len) {
 		size_t nSentBytes = 0;
@@ -73,7 +87,7 @@ private:
 	}
 
    int recvAppend(const int socketFd, vector<char>& buffer) {
-      const size_t bufferSize = 1024 * 64;
+      const size_t bufferSize = 1024;
       char charbuffer[bufferSize];
       int len = recv(socketFd, charbuffer, bufferSize, 0);
       if(len <= 0) { return len; }
@@ -116,14 +130,24 @@ private:
       return HTTPStatus();
    }
 
-   void handleGET(const HTTPRequest& req, const int client_fd) {
+   void handleGET(const HTTPRequest& req, const string& id, const int client_fd) {
       auto consRespResult = HTTPProxyCache::getInstance().constructResponse(req);
 
       if(consRespResult.action == 0) {
+         Log::proxy(Log::msg(
+            id, ": in cache, valid"
+         ));
          Log::debug("in handleRequest(): Send back content from cache");
          const string respStr = consRespResult.resp.toStr();
          sendAll(client_fd, respStr);
+         Log::proxy(Log::msg(
+            id, ": Responding \"",
+            consRespResult.resp.statusLine.toStr(), "\""
+         ));
       } else if(consRespResult.action == 1) {
+         Log::proxy(Log::msg(
+            id, ": not in cache"
+         ));
          Log::debug("in handleRequest(): no valid content from cache");
 
          HTTPRequestParser::AbsoluteForm af = HTTPRequestParser::parseAbsoluteForm(req);
@@ -137,27 +161,50 @@ private:
          
          // contact server
          try {
+            Log::proxy(Log::msg(
+               id, ": Requesting \"", 
+               req.requestLine.toStr(), 
+               "\" from ", addr
+            ));
             sendAll(server_fd, req.toStr());
          } catch(const exception& e) {
             close(server_fd);
             try {
                sendAll(client_fd, getHTTP502HTMLStr(e.what()));
+               Log::proxy(Log::msg(
+                  id, ": Responding \"",
+                  "HTTP/1.1 502 Bad Gateway" ,"\""
+               ));
             } catch(...) {}
             return;
          }
 
          // send response to client
          const HTTPStatus status = recvStatus(server_fd);
+         Log::proxy(Log::msg(
+            id, ": Received \"",
+            status.statusLine.toStr(),
+            "\" from ", addr
+         ));
+
          if(status == HTTPStatus()) {
             try {
                sendAll(client_fd, getHTTP502HTMLStr("Received illegal response from server"));
+               Log::proxy(Log::msg(
+                  id, ": Responding \"",
+                  "HTTP/1.1 502 Bad Gateway" ,"\""
+               ));
             } catch(...) {
                close(server_fd);
             }
             return;
          }
 
-         HTTPProxyCache::getInstance().save(req, status);
+         HTTPProxyCache::getInstance().save(req, status, id);
+         Log::proxy(Log::msg(
+            id, ": Responding \"",
+            status.statusLine.toStr() ,"\""
+         ));
          sendAll(client_fd, status.toStr());
 
          // TODO
@@ -171,6 +218,9 @@ private:
          close(server_fd);
 
       } else if(consRespResult.action == 2) {
+         Log::proxy(Log::msg(
+            id, ": in cache, requires validation"
+         ));
          Log::debug("Begin re-validation!");
          HTTPRequestParser::AbsoluteForm af = HTTPRequestParser::parseAbsoluteForm(req);
          const char* addr = af.authorityForm.host.c_str();
@@ -182,10 +232,19 @@ private:
          }
          // send re-validation to server
          try {
+            Log::proxy(Log::msg(
+               id, ": Requesting \"", 
+               consRespResult.validationReq.requestLine.toStr(), 
+               "\" from ", addr
+            ));
             sendAll(server_fd, consRespResult.validationReq.toStr());
          } catch(const exception& e) {
             close(server_fd);
             try {
+               Log::proxy(Log::msg(
+                  id, ": Responding \"",
+                  "HTTP/1.1 502 Bad Gateway" ,"\""
+               ));
                sendAll(client_fd, getHTTP502HTMLStr(e.what()));
             } catch(...) {
                close(client_fd);
@@ -195,9 +254,18 @@ private:
 
          // get reuslt from server
          const HTTPStatus sta = recvStatus(server_fd);
+         Log::proxy(Log::msg(
+            id, ": Received \"",
+            sta.statusLine.toStr(),
+            "\" from ", addr
+         ));
          if(sta == HTTPStatus()) {
             close(server_fd);
             try {
+               Log::proxy(Log::msg(
+                  id, ": Responding \"",
+                  "HTTP/1.1 502 Bad Gateway" ,"\""
+               ));
                sendAll(client_fd, getHTTP502HTMLStr("while revalidating, we don't understand what server said"));
             } catch(...) {
                close(client_fd);
@@ -209,6 +277,10 @@ private:
          if(sta.statusLine.statusCode == "200") {
             HTTPProxyCache::getInstance().save(req, sta);
             try {
+               Log::proxy(Log::msg(
+                  id, ": Responding \"",
+                  sta.statusLine.toStr() ,"\""
+               ));
                sendAll(client_fd, sta.toStr());
             } catch(...) {
                close(client_fd);
@@ -216,6 +288,10 @@ private:
             }
          } else if(sta.statusLine.statusCode == "304") {
             try {
+               Log::proxy(Log::msg(
+                  id, ": Responding \"",
+                  consRespResult.resp.statusLine.toStr() ,"\""
+               ));
                sendAll(client_fd, consRespResult.resp.toStr());
             } catch(...) {
                close(client_fd);
@@ -223,6 +299,10 @@ private:
             }   
          } else {
             try {
+               Log::proxy(Log::msg(
+                  id, ": Responding \"",
+                  "HTTP/1.1 502 Bad Gateway" ,"\""
+               ));
                sendAll(client_fd, getHTTP502HTMLStr("while revalidating, server returned neither 200 nor 304"));
             } catch(...) {
                close(client_fd);
@@ -232,7 +312,7 @@ private:
       }
    }
 
-   void handlePOST(const HTTPRequest& req, const int client_fd) {
+   void handlePOST(const HTTPRequest& req, const string& id, const int client_fd) {
       HTTPRequestParser::AbsoluteForm af = HTTPRequestParser::parseAbsoluteForm(req);
       const char* addr = af.authorityForm.host.c_str();
       const char* port = af.authorityForm.port == "" ? "80" : af.authorityForm.port.c_str();
@@ -244,10 +324,19 @@ private:
       
       // contact server
       try {
+         Log::proxy(Log::msg(
+            id, ": Requesting \"", 
+            req.requestLine.toStr(), 
+            "\" from ", addr
+         ));
          sendAll(server_fd, req.toStr());
       } catch(const exception& e) {
          close(server_fd);
          try {
+            Log::proxy(Log::msg(
+               id, ": Responding \"",
+               "HTTP/1.1 502 Bad Gateway" ,"\""
+            ));
             sendAll(client_fd, getHTTP502HTMLStr(e.what()));
          } catch(...) {}
          return;
@@ -255,8 +344,17 @@ private:
 
       // send response to client
       const HTTPStatus status = recvStatus(server_fd);
+      Log::proxy(Log::msg(
+            id, ": Received \"",
+            status.statusLine.toStr(),
+            "\" from ", addr
+         ));
       if(status == HTTPStatus()) {
          try {
+            Log::proxy(Log::msg(
+               id, ": Responding \"",
+               "HTTP/1.1 502 Bad Gateway" ,"\""
+            ));
             sendAll(client_fd, getHTTP502HTMLStr("Received illegal response from server"));
          } catch(...) {
             close(server_fd);
@@ -264,6 +362,10 @@ private:
          return;
       }
 
+      Log::proxy(Log::msg(
+         id, ": Responding \"",
+         status.statusLine.toStr() ,"\""
+      ));
       sendAll(client_fd, status.toStr());
 
       // TODO
@@ -277,7 +379,7 @@ private:
       close(server_fd);
    }
 
-   void handleConnect(const HTTPRequest& req, const int client_fd) {
+   void handleConnect(const HTTPRequest& req, const string& id, const int client_fd) {
       auto const af = HTTPRequestParser::parseAuthorityForm(req);
       const int server_fd = connectServer(af.host.c_str(), af.port.c_str());
       if (server_fd == -1) {
@@ -285,13 +387,21 @@ private:
          return;
       }
       try {
+         Log::proxy(Log::msg(
+            id, ": Responding \"",
+            "HTTP/1.1 200 OK" ,"\""
+         ));
          sendAll(client_fd, "HTTP/1.1 200 OK\r\n\r\n");
       } catch(const exception& e) {
+         close(client_fd);
+         Log::proxy(Log::msg(
+            id, ": Tunnel closed"
+         ));
          Log::warning("in handleConnect(): failed to return 200 to client");
          return;
       }
 
-      const size_t bufferSize = 1024 * 64;
+      const size_t bufferSize = 1024;
       char msg_buffer[bufferSize];
       while(true) {
          fd_set readfds;
@@ -316,240 +426,44 @@ private:
          if (send(other_fd, msg_buffer, msg_len, MSG_NOSIGNAL) == -1) {
             break;
          }
-      }       
+      }
+      Log::proxy(Log::msg(
+         id, ": Tunnel closed"
+      ));   
       close(client_fd);
       close(server_fd);
    }
 
    void handleRequest(const int client_fd) {
       // recv the 1st request
-      HTTPRequest req1st = recvRequest(client_fd);
+      const HTTPRequest req1st = recvRequest(client_fd);
+
       if(req1st == HTTPRequest()) {
          close(client_fd);
          Log::debug("in handleRequest(): failed to get 1st request");
          return;
       }
 
+      // for log
+      const string peerIp = getPeerIpBySocket(client_fd);
+      const string id = HTTPProxyCache::getInstance().offerId();
+      Log::proxy(Log::msg(
+         id, ": \"", req1st.requestLine.toStr(), "\" from ",
+         peerIp, " @ ", Log::asctimeNow()
+      ));
+
       if(req1st.requestLine.method == "GET") {
-         handleGET(req1st, client_fd);
+         handleGET(req1st, id, client_fd);
       } else if(req1st.requestLine.method == "POST") {
-         handlePOST(req1st, client_fd);
+         handlePOST(req1st, id, client_fd);
       } else if(req1st.requestLine.method == "CONNECT") {
-         handleConnect(req1st, client_fd);
+         handleConnect(req1st, id, client_fd);
       } else {
          assert(false);
       }
 
       close(client_fd);
-
-      /*
-      if(request.requestLine.method == "POST") {
-         
-         else {
-            Log::debug("in handleRequest(): no valid content from cache");
-            HTTPRequestParser::AbsoluteForm af = HTTPRequestParser::parseAbsoluteForm(request);
-            const char* addr = af.authorityForm.host.c_str();
-            const char* port = af.authorityForm.port == "" ? "80" : af.authorityForm.port.c_str();
-            int server_fd = connectServer(addr, port);
-            if (send(server_fd, request.toStr().c_str(), request.toStr().length(), MSG_NOSIGNAL) == -1) {
-               cerr << "Error: send request to server" << endl;
-               return;
-            }
-            
-            msg_len = recv(server_fd, response_buffer, sizeof(response_buffer), 0);
-            
-            HTTPStatusParser statusParser;
-            HTTPStatus status;
-            statusParser.setBuffer(vector<char>(response_buffer, response_buffer + msg_len));   
-            try {
-               status = statusParser.build();
-            } catch(...) {}
-            HTTPProxyCache::getInstance().save(request, status);
-
-            sendAll(client_fd, status.toStr());
-
-            while ((msg_len = recv(server_fd, response_buffer, sizeof(response_buffer), 0)) > 0) {
-               send(client_fd, response_buffer, msg_len, MSG_NOSIGNAL);
-            }
-            //close(client_fd);
-            close(server_fd);
-         }
-
-         //send(client_fd, response_buffer, msg_len, MSG_NOSIGNAL);
-
-         //while ((msg_len = recv(server_fd, response_buffer, sizeof(response_buffer), 0)) > 0) {
-         // send(client_fd, response_buffer, msg_len, MSG_NOSIGNAL);
-         //}
-         close(client_fd);
-         //close(server_fd);
-      }
-      else if(request.requestLine.method == "CONNECT") {
-         auto af = HTTPRequestParser::parseAuthorityForm(request);
-         int server_fd = connectServer(af.host.c_str(), af.port.c_str());
-         if (server_fd == -1) {
-            cerr << "Error: cannot connect to server" << endl;
-            return;
-         }
-         if (send(client_fd, "HTTP/1.1 200 OK\r\n\r\n", 19, 0) == -1) {
-            cerr << "CONNECT: sent 200 OK to client" << endl;
-            return;
-         }
-         char msg_buffer[bufferSize];
-         while(true) {
-            fd_set readfds;
-            FD_ZERO(&readfds);
-            FD_SET(server_fd, &readfds);
-            FD_SET(client_fd, &readfds);
-            select(max(server_fd, client_fd) + 1, &readfds, NULL, NULL, NULL);
-            int ready_fd; 
-            int other_fd;
-            if (FD_ISSET(server_fd, &readfds)) {  // first priority (terminating signal)
-               ready_fd = server_fd;
-               other_fd = client_fd;
-            }
-            else if (FD_ISSET(client_fd, &readfds)) {
-               ready_fd = client_fd;
-               other_fd = server_fd;
-            }
-            int msg_len = recv(ready_fd, msg_buffer, sizeof(msg_buffer), 0);
-            if (msg_len == -1) {
-               cerr << "CONNECT: receive data" << endl;
-               break;
-            }
-            else if (msg_len == 0) {
-               break;
-            }
-            if (send(other_fd, msg_buffer, msg_len, MSG_NOSIGNAL) == -1) {
-               cerr << "CONNECT: send data" << endl;
-               break;
-            }
-         }       
-         close(client_fd);
-         close(server_fd);
-      }
-      else {
-         close(client_fd);
-      }
-      */
    }
-
-   /*
-	void handleRequest(size_t client_id, int client_fd, sockaddr_storage socket_addr) {
-		const size_t bufferSize = 1024 * 64;
-		char buffer[bufferSize];
-		int len = recv(client_fd, buffer, bufferSize, 0);
-		const string recvStr(buffer, len);
-		HTTPRequestParser requestParser;
-		HTTPRequest request;
-		requestParser.setBuffer(vector<char>(buffer, buffer + len));
-		try {
-			request = requestParser.build();
-		}
-		catch(const HTTPParser::HTTPParserException& e) {
-		  //	cerr << "While building request, HTTPParserException: " << e.what();
-		} catch(const HTTPRequestParser::HTTP400Exception& e) {
-			// may be "HEAD"
-		}
-		if (request.requestLine.method == "GET" || request.requestLine.method == "POST") {
-			auto consRespResult = HTTPProxyCache::getInstance().constructResponse(request);
-			char response_buffer[bufferSize];
-			int msg_len = -1;
-
-			if(consRespResult.action == 0 || consRespResult.action == 2) {
-				Log::debug("in handleRequest(): Send back content from cache");
-				const string respStr = consRespResult.resp.toStr();
-				//Log::verbose(respStr);
-				//strcpy(response_buffer, respStr.c_str());
-				//msg_len = respStr.length();
-				sendAll(client_fd, respStr);
-			}
-			else {
-				Log::debug("in handleRequest(): no valid content from cache");
-				HTTPRequestParser::AbsoluteForm af = HTTPRequestParser::parseAbsoluteForm(request);
-				const char* addr = af.authorityForm.host.c_str();
-				const char* port = af.authorityForm.port == "" ? "80" : af.authorityForm.port.c_str();
-				int server_fd = connectServer(addr, port);
-				if (send(server_fd, request.toStr().c_str(), request.toStr().length(), MSG_NOSIGNAL) == -1) {
-					cerr << "Error: send request to server" << endl;
-					return;
-				}
-				
-				msg_len = recv(server_fd, response_buffer, sizeof(response_buffer), 0);
-				
-				HTTPStatusParser statusParser;
-				HTTPStatus status;
-				statusParser.setBuffer(vector<char>(response_buffer, response_buffer + msg_len));	
-				try {
-					status = statusParser.build();
-				} catch(...) {}
-				HTTPProxyCache::getInstance().save(request, status);
-
-				sendAll(client_fd, status.toStr());
-
-				while ((msg_len = recv(server_fd, response_buffer, sizeof(response_buffer), 0)) > 0) {
-					send(client_fd, response_buffer, msg_len, MSG_NOSIGNAL);
-				}
-				//close(client_fd);
-				close(server_fd);
-			}
-
-			//send(client_fd, response_buffer, msg_len, MSG_NOSIGNAL);
-
-			//while ((msg_len = recv(server_fd, response_buffer, sizeof(response_buffer), 0)) > 0) {
-			//	send(client_fd, response_buffer, msg_len, MSG_NOSIGNAL);
-			//}
-			close(client_fd);
-			//close(server_fd);
-		}
-		else if(request.requestLine.method == "CONNECT") {
-			auto af = HTTPRequestParser::parseAuthorityForm(request);
-			int server_fd = connectServer(af.host.c_str(), af.port.c_str());
-			if (server_fd == -1) {
-				cerr << "Error: cannot connect to server" << endl;
-				return;
-			}
-			if (send(client_fd, "HTTP/1.1 200 OK\r\n\r\n", 19, 0) == -1) {
-				cerr << "CONNECT: sent 200 OK to client" << endl;
-				return;
-			}
-			char msg_buffer[bufferSize];
-			while(true) {
-				fd_set readfds;
-				FD_ZERO(&readfds);
-				FD_SET(server_fd, &readfds);
-				FD_SET(client_fd, &readfds);
-				select(max(server_fd, client_fd) + 1, &readfds, NULL, NULL, NULL);
-				int ready_fd; 
-				int other_fd;
-				if (FD_ISSET(server_fd, &readfds)) {  // first priority (terminating signal)
-					ready_fd = server_fd;
-					other_fd = client_fd;
-				}
-				else if (FD_ISSET(client_fd, &readfds)) {
-					ready_fd = client_fd;
-					other_fd = server_fd;
-				}
-				int msg_len = recv(ready_fd, msg_buffer, sizeof(msg_buffer), 0);
-				if (msg_len == -1) {
-					cerr << "CONNECT: receive data" << endl;
-					break;
-				}
-				else if (msg_len == 0) {
-					break;
-				}
-				if (send(other_fd, msg_buffer, msg_len, MSG_NOSIGNAL) == -1) {
-					cerr << "CONNECT: send data" << endl;
-					break;
-				}
-			}		  
-			close(client_fd);
-			close(server_fd);
-		}
-		else {
-			close(client_fd);
-		}
-	}
-   */
 
 
 public:
@@ -614,6 +528,8 @@ public:
 
 
 int main() {
+   Log::setVerbose(false);
+   Log::setDebug(false);
 	HTTPProxyCache::createInstance();
 	Proxy p("12345");
 	p.start();

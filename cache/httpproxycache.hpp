@@ -50,12 +50,16 @@ namespace zq29Inner {
 		 *
 		 * exception: no throw
 		*/
-		static bool isStrictlyCacheable(const HTTPRequest& req, const HTTPStatus& sta);
+		struct IsCacheableResult {
+			bool isCacheable;
+			string reason;
+		};
+		static IsCacheableResult isStrictlyCacheable(const HTTPRequest& req, const HTTPStatus& sta);
 		
 		/*
 		 * check if they're cacheable according to our project requirements
 		*/
-		static bool isCacheable(const HTTPRequest& req, const HTTPStatus& sta);
+		static IsCacheableResult isCacheable(const HTTPRequest& req, const HTTPStatus& sta);
 		
 		/*
 		 * conver a HTTP date string to seconds
@@ -105,11 +109,18 @@ namespace zq29Inner {
 		HTTPProxyCache& operator=(const HTTPProxyCache& rhs) = delete;
 
 		/*
+		 * assign an id for external usage
+		*/
+		string offerId();
+
+		/*
 		 * save request and response
+		 * if it's not a GET & 200 OK combination, then do nothing
+		 * if it's not cacheable, do nothing
 		 * if request already exists, then update
 		 * return the id assigned to them
 		*/
-		string save(const HTTPRequest& req, const HTTPStatus& sta);
+		string save(const HTTPRequest& req, const HTTPStatus& sta, const string& prevId = noid);
 
 		/*
 		 * implemented according to https://tools.ietf.org/html/rfc7234#section-4
@@ -153,10 +164,13 @@ namespace zq29Inner {
 		string getReqName(const string& id) const;
 		string getStaName(const string& id) const;
 
+		mutex cacheWriteMutex;
+
 		/*
 		 * maintains a pool of available ids
 		*/
 		set<string> idPool;
+		mutex idPoolMutex;
 
 		/*
 		 * find more available ids
@@ -204,53 +218,78 @@ namespace zq29Inner {
 	/////////////////////////////////////////////////////////////////////////////////
 	//////////////////////////// HTTPSemantics Implementation ///////////////////////
 	/////////////////////////////////////////////////////////////////////////////////
-	bool HTTPSemantics::isStrictlyCacheable(const HTTPRequest& req, const HTTPStatus& sta) {
+	HTTPSemantics::IsCacheableResult HTTPSemantics::isStrictlyCacheable(const HTTPRequest& req, const HTTPStatus& sta) {
+		IsCacheableResult result;
+		result.isCacheable = false;
+		result.reason = "in HTTPProxyCache::isStrictlyCacheable, you should NOT see this";
+
 		// if req & sta objects are valid, then rule 1 & 2 are already satisfied
-		if(req == HTTPRequest() || sta == HTTPStatus()) { return false; }
+		if(req == HTTPRequest() || sta == HTTPStatus()) { 
+			result.reason = "request or response not understood by cache";
+			return result;
+		}
 
 		// rule 3 & 4 & 5
 		for(auto const& e : req.headerFields) {
 			if(e.first == "Authorization" || 
 				(e.first == "Cache-Control" && e.second == "no-store")
 			) { 
-				return false; 
+				if(e.first == "Authorization") { result.reason = "found Authorization in header fields of the request"; }
+				else { result.reason = "no-store found in Cache-Control of the request"; }
+				return result;
 			}
 		}
 		for(auto const& e : sta.headerFields) {
 			if(e.first == "Cache-Control" && 
 				(e.second == "no-store" || e.second == "private")
 			) { 
-				return false; 
+				if(e.second == "no-store") { result.reason = "no-store found in Cache-Control of the response"; }
+				else { result.reason = "private found in Cache-Control of the response"; }
+				return result;
 			}
 		}
 
 		// rule 6 
 		for(auto const& e : sta.headerFields) {
 			// rule 6.1
-			if(e.first == "Expires") { return true; }
+			if(e.first == "Expires") { 
+				result.isCacheable = true;
+				result.reason = e.second;
+				return result;
+			}
 			
 			// rule 6.2
 			else if(e.first == "Cache-Control" && 
 				e.second.length() > 8 && e.second.substr(0, 7) == "max-age"
-			) { return true; }
+			) { 
+				result.isCacheable = true;
+				result.reason = e.second;
+				return result; 
+			}
 			
 			// rule 6.3
 			else if(e.first == "Cache-Control" && 
 				e.second.length() > 9 && e.second.substr(0, 8) == "s-maxage"
-			) { return true; }
+			) { 
+				result.isCacheable = true;
+				result.reason = e.second;
+				return result;
+			}
 			
 			// rule 6.4 - 6.6
-			// [BROKEN] not implemented, treated as un-cacheable
+			// [BROKEN] not implemented
 		}
 
-		return false;
+		// [BROKEN] here it always get 200, which is default cacheable
+		result.isCacheable = true;
+		result.reason = "86400"; // heuristicFreshness
+		return result;
 	}	
 
-	bool HTTPSemantics::isCacheable(const HTTPRequest& req, const HTTPStatus& sta) {
-		if(req.requestLine.method != "GET" || 
-			sta.statusLine.statusCode != "200") {
-			return false;
-		}
+	HTTPSemantics::IsCacheableResult HTTPSemantics::isCacheable(const HTTPRequest& req, const HTTPStatus& sta) {
+		// will do this in HTTPCacheProxy::save
+		assert(req.requestLine.method == "GET" &&
+			sta.statusLine.statusCode == "200");
 		return isStrictlyCacheable(req, sta);
 	}
 
@@ -387,22 +426,75 @@ namespace zq29Inner {
 		return createInstance("whatever", true);
 	}
 
-	string HTTPProxyCache::save(const HTTPRequest& req, const HTTPStatus& sta) {
+	string HTTPProxyCache::offerId() {
+		lock_guard<mutex> idPoolLock(idPoolMutex);
+		const string id = *(idPool.begin());
+		idPool.erase(idPool.begin());
+		if(idPool.size() == 0) { updateIdPool(); }
+		return id;
+	}
+
+	string HTTPProxyCache::save(const HTTPRequest& req, const HTTPStatus& sta, const string& prevId) {
 		assert(idPool.size() > 0);
 		
+		if(req.requestLine.method != "GET" || sta.statusLine.statusCode != "200") {
+			return noid;
+		}
+
+		lock_guard<mutex> cacheWriteLock(cacheWriteMutex);
 		auto result = getStaByReq(req.requestLine);
 		// if already exists, update
-		const string id = (result.id == noid ? *(idPool.begin()) : result.id);
-		
-		Cache::save(getReqName(id), req.toStr());
-		Cache::save(getStaName(id), sta.toStr());
-		Log::debug("Yeah! New pair in cache!");
-
-		// erase after successfully save
-		if(id != noid) { idPool.erase(idPool.begin()); }
-		if(idPool.size() == 0) {
-			updateIdPool();
+		string id = noid;
+		if(result.id != noid) { 
+			if(prevId != noid) {
+				Log::warning("called save() with unnecessary prevId argument");
+			}
+			id = result.id;
+		} else if(prevId != noid) {
+			id = prevId;
+		} else {
+			id = *(idPool.begin());
+			idPool.erase(idPool.begin());
+			if(idPool.size() == 0) { updateIdPool(); }
 		}
+		
+		auto detRes = HTTPSemantics::isCacheable(req, sta);
+		if(detRes.isCacheable) {
+			Cache::save(getReqName(id), req.toStr());
+			Cache::save(getStaName(id), sta.toStr());
+
+			// for log
+			auto const fooRes = constructResponse(req);
+			if(fooRes.action == 2) {
+				Log::proxy(Log::msg(
+					id, ": cached, but requires re-validation"
+				));
+			} else {
+				time_t expireTime = time(0);
+				int temp = HTTPSemantics::dateStrToSeconds(detRes.reason);
+				if(temp >= 0) {
+					expireTime = (int)temp;
+				} else {
+					time_t delta = 0;
+					stringstream ss;
+					ss << detRes.reason;
+					ss >> delta;
+					if(!ss) { assert(false); }
+					expireTime += delta;
+				}
+				Log::proxy(Log::msg(
+					id, ": cached, expires at ",
+					Log::asctimeFromTimeT(expireTime)
+				));
+			}
+
+		} else { // not cacheable
+			Log::proxy(Log::msg(
+				id, ": not cacheable because ",
+				detRes.reason
+			));
+		}
+
 		return id;
 	}
 
@@ -423,7 +515,7 @@ namespace zq29Inner {
 
 		// rule 2: method, in our case, "GET"
 		if(req.requestLine.method != "GET") {
-			Log::debug("you may want to check HTTPProxyCache::constructResponses rule 2 code");
+			Log::debug("you may want to check HTTPProxyCache::constructResponse rule 2 code");
 			result.action = 1;
 			return result;
 		}
@@ -433,7 +525,7 @@ namespace zq29Inner {
 		// rule 4: [PARTIALLY BROKEN], no support for pragma since it is HTTP 1.0
 		for(auto const& e : req.headerFields) {
 			if(e.first == "Cache-Control" && e.second == "no-cache") {
-				Log::debug("in constructResponses: request has 'no-cache'");
+				Log::debug("in constructResponse: request has 'no-cache'");
 				result.action = 2;
 				result.resp = resp;
 				result.validationReq = buildValidationRequest(req, resp);
@@ -444,7 +536,7 @@ namespace zq29Inner {
 		// rule 5
 		for(auto const& e : resp.headerFields) {
 			if(e.first == "Cache-Control" && e.second == "no-cache") {
-				Log::debug("in constructResponses: response has 'no-cache'");
+				Log::debug("in constructResponse: response has 'no-cache'");
 				result.action = 2;
 				result.validationReq = buildValidationRequest(req, resp);
 				return result;
@@ -453,20 +545,20 @@ namespace zq29Inner {
 
 		// rule 6.1
 		if(HTTPSemantics::isRespFresh(resp, respTime)) {
-			Log::debug("in constructResponses: response is fresh");
+			Log::debug("in constructResponse: response is fresh");
 			result.action = 0;
 			result.resp = resp;
 			return result;
 		} else if(false) { // rule 6.2
 			// [BROKEN]: NEVER allowed to be served stale
 		} else {
-			Log::debug("in constructResponses: rule 6.2 go re-validation");
+			Log::debug("in constructResponse: rule 6.2 go re-validation");
 			result.action = 2;
 			result.validationReq = buildValidationRequest(req, resp);
 			return result;
 		}
 		
-		Log::debug("in constructResponses: no rule matched, no response constructed");
+		Log::debug("in constructResponse: no rule matched, no response constructed");
 		result.action = 1;
 		return result;
 	}

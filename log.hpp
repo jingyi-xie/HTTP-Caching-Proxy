@@ -11,6 +11,7 @@
 #include <mutex>
 #include <sstream>
 #include <stdexcept>
+#include <ctime>
 
 namespace zq29 {
 namespace zq29Inner {
@@ -72,6 +73,40 @@ namespace zq29Inner {
 		static void setWarning(bool b) { __warning = b; }
 		static void setError(bool b) { __error = b; }
 
+		static string asctimeNow() {
+			time_t rawtime;
+			tm* timeinfo;
+			time(&rawtime);
+			timeinfo = localtime(&rawtime);
+			string result = string(asctime(timeinfo));
+
+			// asctime is a stupid function
+			// why should it return with a '\n' at last !??
+			if(result[result.length() - 1] == '\n') { 
+				result = result.substr(0, result.length() - 1);
+			}
+			return result;
+		}
+
+		static string asctimeFromTimeT(const time_t t) {
+			time_t rawtime = t;
+			tm* timeinfo;
+			timeinfo = localtime(&rawtime);
+			string result = string(asctime(timeinfo));
+
+			// asctime is a stupid function
+			// why should it return with a '\n' at last !??
+			if(result[result.length() - 1] == '\n') { 
+				result = result.substr(0, result.length() - 1);
+			}
+			return result;
+		}
+
+		static void proxy(const string& msg) {
+			lock_guard<mutex> lck(printLock);
+			cout << msg << endl;
+		}
+
 		static void verbose(const string& msg) {
 			if(__verbose) {
 				lock_guard<mutex> lck(printLock);
@@ -89,14 +124,14 @@ namespace zq29Inner {
 		static void warning(const string& msg) {
 			if(__warning) {
 				lock_guard<mutex> lck(printLock);
-				__printYellowNoLock(Log::msg("***WARNING***: ", msg));
+				__printYellowNoLock(Log::msg("(no-id): WARNING ", msg));
 			}
 		}
 
 		static void error(const string& msg) {
 			if(__error) {
 				lock_guard<mutex> lck(printLock);
-				__printRedNoLock(Log::msg("***ERROR***: ", msg));
+				__printRedNoLock(Log::msg("(no-id): ERROR ", msg));
 			}
 		}
 

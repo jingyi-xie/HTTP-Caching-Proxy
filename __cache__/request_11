@@ -1,6 +1,0 @@
-GET http://ocsp.apple.com/ocsp03-appleistca2g125/MFEwTzBNMEswSTAJBgUrDgMCGgUABBQmhIezjFAVKZfb1NF%2BN%2F8%2FLvMVaAQU2HqURHyQcJAWnt0XnAFEA4bWKikCEGEUmSuOvy4Am4wVyjWE0JU%3D HTTP/1.1
-Accept: */*
-Host: ocsp.apple.com
-Proxy-Connection: Keep-Alive
-User-Agent: Microsoft-CryptoAPI/10.0
-
