@@ -545,6 +545,8 @@ namespace zq29Inner {
 		*/
 		string getHTTP400HTMLStr(const string& error);
 
+		string getHTTP502HTMLStr(const string& error);
+
 		/*
 		 * hack the status HTML string, add "<h1>zq29 HTTP Cache Proxy</h1>"
 		 * if no <body> tag, do nothing
@@ -1288,6 +1290,26 @@ namespace zq29Inner {
 		sl.httpVersion = "HTTP/1.1";
 		sl.statusCode = "400";
 		sl.reasonPhrase = "Bad Request";
+
+		set<pair<string, string>> headers;
+		stringstream ss;
+		ss << html.length();
+		headers.insert(make_pair("Content-Length", ss.str()));
+
+		HTTPStatus resp(sl, headers, html);
+		return resp.toStr();
+	}
+
+	string sc::getHTTP502HTMLStr(const string& error) {
+		const string html = "<!DOCTYPE html PUBLIC \"-//IETF//DTD HTML 2.0//EN\">\n"\
+			"<html><head><meta http-equiv=\"Content-Type\" content=\"text/html\">\n"\
+			"<title>400 Bad Gateway</title>\n</head><body><h1>502 Bad Gateway</h1>\n<p>" +
+			error + "</p>\n<hr><address>zq29 HTTP Cache Proxy</address></body></html>\n";
+
+		HTTPStatus::StatusLine sl;
+		sl.httpVersion = "HTTP/1.1";
+		sl.statusCode = "502";
+		sl.reasonPhrase = "Bad Gateway";
 
 		set<pair<string, string>> headers;
 		stringstream ss;
