@@ -1,7 +1,5 @@
-CPPFLAGS=-Wall -Werror -pedantic -std=c++17 -g
+CPPFLAGS=-Wall -Werror -pedantic -std=c++17 -g -DNDEBUG
 COMMON=log.hpp
-
-all: main tests
 
 main: main.cpp
 	g++-9.1 $(CPPFLAGS) main.cpp -o main -lpthread
