@@ -1320,7 +1320,7 @@ namespace zq29Inner {
 	string sc::getHTTP502HTMLStr(const string& error) {
 		const string html = "<!DOCTYPE html PUBLIC \"-//IETF//DTD HTML 2.0//EN\">\n"\
 			"<html><head><meta http-equiv=\"Content-Type\" content=\"text/html\">\n"\
-			"<title>400 Bad Gateway</title>\n</head><body><h1>502 Bad Gateway</h1>\n<p>" +
+			"<title>502 Bad Gateway</title>\n</head><body><h1>502 Bad Gateway</h1>\n<p>" +
 			error + "</p>\n<hr><address>zq29 HTTP Cache Proxy</address></body></html>\n";
 
 		HTTPStatus::StatusLine sl;
