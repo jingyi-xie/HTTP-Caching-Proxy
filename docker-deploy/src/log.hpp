@@ -58,7 +58,7 @@ namespace zq29Inner {
 			if(__ifWriteToFile) {
 				ofstream ofs(logFilePath);
 				if(ofs) {
-					ofs << msg;
+					ofs << msg << endl;
 				} else {
 					__printYellowNoLock("Failed to write to log file " + logFilePath);
 				}
