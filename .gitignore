@@ -4,3 +4,4 @@ proxy_main
 main
 __cache__/
 sftp-config.json
+log/
