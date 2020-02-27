@@ -528,6 +528,7 @@ public:
 
 
 int main() {
+	Log::startWriteToFile();
 	Log::setVerbose(false);
 	Log::setDebug(false);
 	HTTPProxyCache::createInstance();

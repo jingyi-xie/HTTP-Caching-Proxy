@@ -12,6 +12,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <ctime>
+#include <fstream>
 
 namespace zq29 {
 namespace zq29Inner {
@@ -23,7 +24,10 @@ namespace zq29Inner {
 		static bool __debug;
 		static bool __warning;
 		static bool __error;
+		static bool __ifWriteToFile;
 		static mutex printLock;
+
+		static string logFilePath;
 
 		static void _msg(stringstream& is) {}
 		template<typename T, typename... Rest>
@@ -50,6 +54,18 @@ namespace zq29Inner {
 			cout << "\033[0;36m" << msg << "\033[0m" << endl;
 		}
 
+		static void __writeToFileIfEnabledNoLock(const string& msg) {
+			if(__ifWriteToFile) {
+				ofstream ofs(logFilePath);
+				if(ofs) {
+					ofs << msg;
+				} else {
+					__printYellowNoLock("Failed to write to log file " + logFilePath);
+				}
+				ofs.close();
+			}
+		}
+
 	public:
 		template<typename... T>
 		static string msg(T... args) {
@@ -72,6 +88,8 @@ namespace zq29Inner {
 		static void setDebug(bool b) { __debug = b; }
 		static void setWarning(bool b) { __warning = b; }
 		static void setError(bool b) { __error = b; }
+		static void startWriteToFile() { __ifWriteToFile = true; }
+		static void endWriteToFile() { __ifWriteToFile = false; }
 
 		static string asctimeNow() {
 			time_t rawtime;
@@ -104,7 +122,8 @@ namespace zq29Inner {
 
 		static void proxy(const string& msg) {
 			lock_guard<mutex> lck(printLock);
-			cout << msg << endl;
+			//cout << msg << endl;
+			__writeToFileIfEnabledNoLock(msg);
 		}
 
 		static void verbose(const string& msg) {
@@ -143,10 +162,17 @@ namespace zq29Inner {
 
 	};
 
+	string Log::logFilePath = "/var/log/erss/proxy.log";
 	bool Log::__verbose = true;
 	bool Log::__debug = true;
 	bool Log::__warning = true;
 	bool Log::__error = true;
+	/* 
+	 * do NOT change the line below
+	 * call Log::startWriteToFile instead, which is
+	 * sadly, not thread-safe
+	*/
+	bool Log::__ifWriteToFile = false;
 	mutex Log::printLock;
 }
 	using zq29Inner::Log;

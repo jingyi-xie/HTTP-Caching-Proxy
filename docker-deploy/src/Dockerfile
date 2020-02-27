@@ -1,7 +1,7 @@
 FROM gcc:9
 
-RUN mkdir /code
-RUN mkdir /var/log/erss
+RUN mkdir -p /code
+RUN mkdir -p /var/log/erss
 WORKDIR /code
 add . /code/
 
