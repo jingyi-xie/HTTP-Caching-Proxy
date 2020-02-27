@@ -528,12 +528,122 @@ void proxyTest() {
 	}
 }
 
+void testSplitAndStrip() {
+	const string TAG = "testSplitAndStrip";
+	bool failFlag = false;
 
+	auto strip = [](const string& s)->string {
+		size_t i = 0, j = s.length() - 1;
+		while(s[i] == ' ' || s[i] == '\t') { i++; };
+		while(s[j] == ' ' || s[j] == '\t') { j--; };
+		if(i > j) { return ""; }
+		return s.substr(i, j - i + 1);
+	};
+
+	auto splitByCommaAndStrip = [&strip](string s)->vector<string> {
+		vector<string> res;
+		size_t pos = string::npos;
+		while((pos = s.find(',')) != string::npos) {
+			res.push_back(s.substr(0, pos));
+			s = s.substr(pos + 1, string::npos);
+		}
+		res.push_back(s);
+		for(size_t i = 0; i < res.size(); i++) {
+			res[i] = strip(res[i]);
+		}
+		return res;
+	};
+
+	const vector<string> cases1 = {
+		"", " ", "\t", "  ", "\t\t",
+		"   ", "\t\t\t",
+		"1", " 1", "1 ", " 1 ",
+		" 1 1 "
+	};
+	const vector<string> res1 = {
+		"", "", "", "", "",
+		"", "",
+		"1", "1", "1", "1",
+		"1 1"
+	};
+	assert(cases1.size() == res1.size());
+	for(size_t i = 0; i < cases1.size(); i++) {
+		if(strip(cases1[i]) != res1[i]) {
+			failFlag = true;
+			Log::testFail(TAG, Log::msg(
+				"case <", cases1[i], ">, expected <",
+				res1[i], ">, got <", strip(cases1[i]), ">"
+			));
+		}
+	}
+
+	const vector<string> cases2 = {
+		"", " ", "  ", "   ",
+		"1", " 1", "1 ", " 1 ",
+		"1,2", "1, 2",
+		"1, 2, 3, 4",
+		",1,2", "1,2,",
+		",1,2,",
+		",", ",,"
+	};
+	const vector<vector<string>> res2 = {
+		{""}, {""}, {""}, {""},
+		{"1"}, {"1"}, {"1"}, {"1"},
+		{"1", "2"}, {"1", "2"},
+		{"1", "2", "3", "4"},
+		{"", "1", "2"}, {"1", "2", ""},
+		{"", "1", "2", ""},
+		{"", ""}, {"", "", ""}
+	};
+	assert(cases2.size() == res2.size());
+	for(size_t i = 0; i < cases2.size(); i++) {
+		
+		vector<string> got = splitByCommaAndStrip(cases2[i]);
+		
+		if(got.size() != res2[i].size()) {
+			failFlag = true;
+			Log::testFail(TAG, Log::msg(
+				"case when checking size of <", cases2[i], ">",
+				" expected <", res2[i].size(), ">, got <",
+				got.size(), ">"
+			));
+		}
+
+		for(size_t j = 0; j < got.size(); j++) {
+			if(got[j] != res2[i][j]) {
+				failFlag = true;
+				Log::testFail(TAG, Log::msg(
+					"case <", cases2[i], ">"
+				));
+			}
+		}
+	}
+
+	set<pair<string, string>> headerFields = {
+		make_pair("Cache-Control", "public, max-age=100")
+	};
+	vector<string> newValues;
+	for(auto it = headerFields.begin(); it != headerFields.end();) {
+		if((*it).first == "Cache-Control") {
+			auto temp = splitByCommaAndStrip((*it).second);
+			newValues.insert(newValues.end(), temp.begin(), temp.end());
+			headerFields.erase(it++);
+		} else { // stupid C++
+			++it;
+		}
+	}
+	for(auto const& v : newValues) {
+		headerFields.insert(make_pair("Cache-Control", v));
+	}
+
+	if(!failFlag) { Log::testSuccess(TAG); }
+}
 
 int main() {
 	testHexParsing();
 	HTTPParserTest().doTest();
 	HTTPRequestParserTest().doTest();
 	HTTPStatusParserTest().doTest();
-	proxyTest();
+	//proxyTest();
+	testSplitAndStrip();
 }

@@ -118,6 +118,30 @@ void testGetStaByReq() {
 	ofs.close();
 }
 
+void testFreshness() {
+	ifstream ifs;
+	ifs.open("__cache__/response_26");
+	const string str1 = string(std::istreambuf_iterator<char>(ifs), std::istreambuf_iterator<char>());
+	ifs.close();
+	
+	ifs.open("__cache__/request_26");
+	const string str2 = string(std::istreambuf_iterator<char>(ifs), std::istreambuf_iterator<char>());
+	ifs.close();
+
+	HTTPStatusParser p;
+	p.setBuffer(vector<char>(str1.begin(), str1.end()));
+	auto resp = p.build();
+
+	HTTPRequestParser p2;
+	p2.setBuffer(vector<char>(str2.begin(), str2.end()));
+	auto req = p2.build();
+
+	for(auto const& e : resp.headerFields) {
+		Log::verbose(Log::msg("<", e.first, ">, <", e.second, ">"));
+	}
+
+	HTTPSemantics::isCacheable(req, resp);
+}
 
 int main() {
 	testCacheBasic();
@@ -125,4 +149,5 @@ int main() {
 	testHTTPProxyCacheBasic();
 	testTime();
 	testGetStaByReq();
+	testFreshness();
 }

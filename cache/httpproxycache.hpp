@@ -263,7 +263,7 @@ namespace zq29Inner {
 				e.second.length() > 8 && e.second.substr(0, 7) == "max-age"
 			) { 
 				result.isCacheable = true;
-				result.reason = e.second;
+				result.reason = e.second.substr(8, string::npos);
 				return result; 
 			}
 			
@@ -272,7 +272,7 @@ namespace zq29Inner {
 				e.second.length() > 9 && e.second.substr(0, 8) == "s-maxage"
 			) { 
 				result.isCacheable = true;
-				result.reason = e.second;
+				result.reason = e.second.substr(9, string::npos);
 				return result;
 			}
 			

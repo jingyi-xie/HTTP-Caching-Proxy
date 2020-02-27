@@ -371,6 +371,12 @@ namespace zq29Inner {
 		string getCRLFLine();
 
 		/*
+		 * the header we care the most
+		 * called by parseHeaderFields at the end
+		*/
+		void parseCacheControl();
+
+		/*
 		 * extract header fields from buffer,
 		 * set headerFields
 		 * will parse the end of header (CR LF) as well
@@ -893,6 +899,44 @@ namespace zq29Inner {
 		return buffer;
 	}
 
+	void HTTPParser::parseCacheControl() {
+		auto strip = [](const string& s)->string {
+			size_t i = 0, j = s.length() - 1;
+			while(s[i] == ' ' || s[i] == '\t') { i++; };
+			while(s[j] == ' ' || s[j] == '\t') { j--; };
+			if(i > j) { return ""; }
+			return s.substr(i, j - i + 1);
+		};
+
+		auto splitByCommaAndStrip = [&strip](string s)->vector<string> {
+			vector<string> res;
+			size_t pos = string::npos;
+			while((pos = s.find(',')) != string::npos) {
+				res.push_back(s.substr(0, pos));
+				s = s.substr(pos + 1, string::npos);
+			}
+			res.push_back(s);
+			for(size_t i = 0; i < res.size(); i++) {
+				res[i] = strip(res[i]);
+			}
+			return res;
+		};
+
+		vector<string> newValues;
+		for(auto it = headerFields.begin(); it != headerFields.end();) {
+			if((*it).first == "Cache-Control") {
+				auto temp = splitByCommaAndStrip((*it).second);
+				newValues.insert(newValues.end(), temp.begin(), temp.end());
+				headerFields.erase(it++);
+			} else { // stupid C++
+				++it;
+			}
+		}
+		for(auto const& v : newValues) {
+			headerFields.insert(make_pair("Cache-Control", v));
+		}
+	}
+
 	void HTTPParser::parseHeaderFields() {
 		string line;
 		while((line = getCRLFLine()) != "") {
@@ -937,7 +981,8 @@ namespace zq29Inner {
 
 			headerFields.insert(make_pair(name, value));
 		}
-
+		
+		parseCacheControl();
 	}
 
 	void HTTPParser::clear() {
