@@ -4,8 +4,8 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 NC='\033[0m'
 
-#make clean
-#make
+make clean
+make
 
 printf "${GREEN}1"
 echo '######################################################################'
@@ -36,14 +36,65 @@ echo 'start running proxy server...(wait 3 seconds here)'
 sleep 3
 echo 'proxy started!'
 echo ''
+
+
+
+
+
+
+
+
+
+
+
+# ------------------------------------- WRITE TEST CASES HERE --------------------------------
 printf "${GREEN}1. normal request, expected HTTP 200${NC}\n"
 sleep 1
 echo "$(cat testCases/req1.txt)"
 nc localhost 1234 < testCases/req1.txt
 
+# ------------------------------------- END TEST CASES ---------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+printf "${GREEN}"
+echo '######################################################################'
+echo '########################## End Testing ###############################'
+echo '######################################################################'
+echo ''
+printf "${NC}"
+printf "killing demo process with pid $demoPid"
 kill "$demoPid"
 
 
+printf "${GREEN}"
+echo '######################################################################'
+echo '##################### Start Proxy As Daemon ##########################'
+echo '######################################################################'
+echo ''
+printf "${NC}"
+
+echo 'run ./main'
+./main
 
 
-#while true ; do continue ; done
+printf "${GREEN}"
+echo '######################################################################'
+echo '######################## Proxy Is Running ############################'
+echo '######################################################################'
+echo ''
+printf "${NC}"
+
+while true ; do continue ; done
