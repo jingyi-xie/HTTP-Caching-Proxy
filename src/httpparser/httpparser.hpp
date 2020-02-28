@@ -1094,6 +1094,7 @@ namespace zq29Inner {
 			if(buffer.size() >= size_t(contentLength)) {
 				messageBody = string(buffer.begin(), buffer.begin() + contentLength);
 				buffer.erase(buffer.begin(), buffer.begin() + contentLength);
+				return;
 			} else {
 				throw HTTPParserException("buffer size < Content-Length");
 			}
