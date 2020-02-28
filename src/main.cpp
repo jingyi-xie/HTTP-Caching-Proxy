@@ -139,8 +139,16 @@ private:
 		return HTTPStatus();
 	}
 
-	void handleGET(const HTTPRequest& req, const string& id, const int client_fd) {
+	void handleGET(const HTTPRequest& req, string id, const int client_fd, const string& reqLine, const string& peerIp) {
 		auto consRespResult = HTTPProxyCache::getInstance().constructResponse(req);
+		if(consRespResult.id != Cache::noid) {
+			id = consRespResult.id; // override id
+		}
+
+		Log::proxy(Log::msg(
+			id, ": \"", reqLine, "\" from ",
+			peerIp, " @ ", Log::asctimeNow()
+		));
 
 		if(consRespResult.action == 0) {
 			Log::proxy(Log::msg(
@@ -443,7 +451,7 @@ private:
 		close(server_fd);
 	}
 
-	void handleRequest(const int client_fd) {
+	void __handleRequest(const int client_fd) {
 		// recv the 1st request
 		const HTTPRequest req1st = recvRequest(client_fd);
 
@@ -456,13 +464,15 @@ private:
 		// for log
 		const string peerIp = getPeerIpBySocket(client_fd);
 		const string id = HTTPProxyCache::getInstance().offerId();
-		Log::proxy(Log::msg(
-			id, ": \"", req1st.requestLine.toStr(), "\" from ",
-			peerIp, " @ ", Log::asctimeNow()
-		));
+		if(req1st.requestLine.method != "GET") { // GET may override the id
+			Log::proxy(Log::msg(
+				id, ": \"", req1st.requestLine.toStr(), "\" from ",
+				peerIp, " @ ", Log::asctimeNow()
+			));
+		}
 
 		if(req1st.requestLine.method == "GET") {
-			handleGET(req1st, id, client_fd);
+			handleGET(req1st, id, client_fd, req1st.requestLine.toStr(), peerIp);
 		} else if(req1st.requestLine.method == "POST") {
 			handlePOST(req1st, id, client_fd);
 		} else if(req1st.requestLine.method == "CONNECT") {
@@ -472,6 +482,14 @@ private:
 		}
 
 		close(client_fd);
+	}
+
+	void handleRequest(const int client_fd) {
+		try {
+			__handleRequest(client_fd);
+		} catch(const exception& e) {
+			Log::warning(Log::msg("Exception ignored, what(): ", e.what()));
+		}
 	}
 
 

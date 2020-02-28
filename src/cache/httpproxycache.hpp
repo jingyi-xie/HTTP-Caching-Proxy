@@ -143,6 +143,7 @@ namespace zq29Inner {
 			int action;
 			HTTPStatus resp;
 			HTTPRequest validationReq;
+			string id; // if not exists, noid
 		};
 		ConsRespResult constructResponse(const HTTPRequest& req);
 
@@ -501,6 +502,7 @@ namespace zq29Inner {
 	HTTPProxyCache::ConsRespResult HTTPProxyCache::constructResponse(const HTTPRequest& req) {
 		ConsRespResult result;
 		const GetStaResult r = getStaByReq(req.requestLine);
+		result.id = r.id;
 		const HTTPStatus& resp = r.s;
 		const time_t respTime = r.respTime;
 

@@ -144,7 +144,7 @@ namespace zq29Inner {
 			if(__warning) {
 				lock_guard<mutex> lck(printLock);
 				__printYellowNoLock(Log::msg("(no-id): WARNING ", msg));
-				__writeToFileIfEnabledNoLock(Log::msg("(no-id): WARNING ", msg));
+				//__writeToFileIfEnabledNoLock(Log::msg("(no-id): WARNING ", msg));
 			}
 		}
 

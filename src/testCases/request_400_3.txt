@@ -1,0 +1,15 @@
+POST http://httpbin.org/post HTTP/1.1
+Host: httpbin.org
+User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:73.0) Gecko/20100101 Firefox/73.0
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8
+Accept-Language: en-US,en;q=0.5
+Accept-Encoding: gzip, deflate
+Content-Type: application/x-www-form-urlencoded
+Content-Length: -1
+Origin: http://httpbin.org
+Connection: keep-alive
+Referer: http://httpbin.org/forms/post
+Upgrade-Insecure-Requests: 1
+
+custname=&custtel=&custemail=&size=small&topping=bacon&delivery=&comments=
+we expect an HTTP 400 response to this request

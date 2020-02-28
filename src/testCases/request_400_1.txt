@@ -1,0 +1,10 @@
+GET http://www.rabihyounes.com/images/me.jpg HTTP/1.1 HTTP/1.1
+Host: www.rabihyounes.com
+User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:73.0) Gecko/20100101 Firefox/73.0
+Accept: image/webp,*/*
+Accept-Language: en-US,en;q=0.5
+Accept-Encoding: gzip, deflate
+Connection: keep-alive
+Referer: http://www.rabihyounes.com/
+
+we expect an HTTP 200 response to this request
