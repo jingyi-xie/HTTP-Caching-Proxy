@@ -56,7 +56,7 @@ namespace zq29Inner {
 
 		static void __writeToFileIfEnabledNoLock(const string& msg) {
 			if(__ifWriteToFile) {
-				ofstream ofs(logFilePath);
+				ofstream ofs(logFilePath, ofstream::app);
 				if(ofs) {
 					ofs << msg << endl;
 				} else {
