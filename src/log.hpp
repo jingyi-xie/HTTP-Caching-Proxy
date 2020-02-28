@@ -122,7 +122,7 @@ namespace zq29Inner {
 
 		static void proxy(const string& msg) {
 			lock_guard<mutex> lck(printLock);
-			cout << msg << endl;
+			__printYellowNoLock(msg);
 			__writeToFileIfEnabledNoLock(msg);
 		}
 

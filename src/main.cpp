@@ -107,8 +107,12 @@ private:
 			try {
 				req1st = reqParser1st.build();
 				return req1st;
-			} catch(const exception& e) {
+			}
+			catch(const HTTPParser::HTTPParserException& e) {}
+			catch(const HTTPStatusParser::StatusNotCompleteException& e) {}
+			catch(const exception& e) {
 				Log::debug(Log::msg("error in handleRequest(): ", e.what()));
+				throw;
 			}
 		}
 		return HTTPRequest();
@@ -532,20 +536,29 @@ public:
 };
 
 
-int main() {
-	if(daemon(0, 0) != 0) {
-		Log::error("daemon call failed! exit!");
-		return 0;
-	}
+int main(int argc, char** argv) {
+	string port = "12345";
 
-	Log::startWriteToFile();
+	if(argc == 1) {
+		if(daemon(0, 0) != 0) {
+			Log::error("daemon call failed! exit!");
+			return 0;
+		}
+		Log::startWriteToFile();	
+	} 
+
+	else { // do demo
+		port = "1234";
+	} 
+
+	HTTPProxyCache::createInstance();
 	Log::setVerbose(false);
 	Log::setDebug(false);
-	HTTPProxyCache::createInstance();
+
 
 	while(true) {
 		try {
-			Proxy p("12345");
+			Proxy p(port.c_str());
 			p.start();
 		} catch(const exception& e) {
 			Log::error(e.what());
