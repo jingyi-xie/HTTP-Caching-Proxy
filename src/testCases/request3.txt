@@ -7,4 +7,3 @@ Accept-Encoding: gzip, deflate
 Connection: keep-alive
 Upgrade-Insecure-Requests: 1
 
-we expect an HTTP 200 response to this request

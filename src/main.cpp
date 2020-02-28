@@ -108,8 +108,12 @@ private:
 				req1st = reqParser1st.build();
 				return req1st;
 			}
-			catch(const HTTPParser::HTTPParserException& e) {}
-			catch(const HTTPStatusParser::StatusNotCompleteException& e) {}
+			catch(const HTTPParser::HTTPParserException& e) {
+				int foo = 1;
+			}
+			catch(const HTTPStatusParser::StatusNotCompleteException& e) {
+				int foo = 1;
+			}
 			catch(const exception& e) {
 				Log::debug(Log::msg("error in handleRequest(): ", e.what()));
 				throw;

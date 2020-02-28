@@ -4,8 +4,8 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 NC='\033[0m'
 
-make clean
-make
+#make clean
+#make
 
 printf "######################################################################
 ########################## ${GREEN}Before Testing${NC} ############################
@@ -42,10 +42,18 @@ echo ''
 
 
 # ------------------------------------- WRITE TEST CASES HERE --------------------------------
-printf "${GREEN}1. normal request, expected HTTP 200${NC}\n"
-sleep 1
-echo "$(cat testCases/req1.txt)"
-nc localhost 1234 < testCases/req1.txt > /dev/null 2>&1
+declare -a titles=("Trival GET" "First GET" "Second GET, request the same as testcase 2" "Trival POST" "ill-formatted GET" "ill-formatted POST" "GET a 404")
+declare -a exps=("get and cache" "get and cache" "be able to find response in cache" "do the work and not cache" "report warning and continue" "report warning and continue" "get and do not cache")
+nCases=${#titles[@]}
+
+for (( i=1; i<${nCases}+1; i++ ));
+do
+	printf "\n${GREEN}${i}. ${titles[$i-1]}${NC}\n\n"
+	sleep 1
+	printf "$(cat testCases/request${i}.txt)"
+	printf "\ntimeout 5 nc localhost 1234 < testCases/request${i}.txt > /dev/null 2>&1\n\n"
+	timeout 5 nc localhost 1234 < testCases/request${i}.txt > /dev/null 2>&1
+done
 
 # ------------------------------------- END TEST CASES ---------------------------------------
 
@@ -62,7 +70,7 @@ nc localhost 1234 < testCases/req1.txt > /dev/null 2>&1
 
 
 
-
+printf "\n\n\n"
 printf "######################################################################
 ########################## ${GREEN}End Testing${NC} ###############################
 ######################################################################\n\n"
@@ -81,5 +89,7 @@ echo 'run ./main'
 printf "######################################################################
 ######################## ${GREEN}Proxy Is Running${NC} ############################
 ######################################################################\n\n"
+
+echo 'shell script goes to a while(1) loop...'
 
 while true ; do continue ; done
