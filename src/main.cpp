@@ -15,9 +15,10 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <memory>
 
 #define BACKLOG 500
-#define RETRY 1000
+#define RETRY 2000
 
 using namespace zq29;
 using namespace std;
@@ -87,11 +88,11 @@ private:
 	}
 
 	int recvAppend(const int socketFd, vector<char>& buffer) {
-		const size_t bufferSize = 1024;
-		char charbuffer[bufferSize];
-		int len = recv(socketFd, charbuffer, bufferSize, 0);
+		const size_t bufferSize = 16 * 1024 * 1024;
+		shared_ptr<char[]> charbuffer(new char[bufferSize]);
+		int len = recv(socketFd, charbuffer.get(), bufferSize, 0);
 		if(len <= 0) { return len; }
-		const vector<char> temp(charbuffer, charbuffer + len);
+		const vector<char> temp(charbuffer.get(), charbuffer.get() + len);
 		buffer.insert(buffer.end(), temp.begin(), temp.end());
 		return len;
 	}
@@ -118,6 +119,9 @@ private:
 		HTTPStatus sta;
 		vector<char> buffer;
 		for(int _ = 0; _ < RETRY; _++) {
+			if(_ != 0 && _ % (RETRY / 10) == 0) {
+				Log::warning("We detected a very large response, please wait...");
+			}
 			if(recvAppend(server_fd, buffer) < 0) { break; }
 			staParser.setBuffer(buffer);
 			try {
@@ -127,6 +131,7 @@ private:
 				Log::debug(Log::msg("error in handleRequest(): ", e.what()));
 			}
 		}
+		Log::warning("The response is bad or too large");
 		return HTTPStatus();
 	}
 
