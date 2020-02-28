@@ -1,3 +1,27 @@
 * request and response are matched based on non-encrypted filenames so can be easilly modified by rename the file
 
-* I now realised that I should keep track of the exception guarantee at the very beginning. it's hard to check it when a functino calls a ton of other functions whose exception guarantee was not clear
+
+* I now realised that I should keep track of the exception guarantee at the very beginning. it's hard to check it when a function calls a ton of other functions whose exception guarantees are not clear
+
+
+* External failures - Answers to checklist question 6 (6.Your code should be robust to external failures. (i.e. What failures did you handle in your code? how do you handle them? You can answer these in your danger log.)
+	
+	- in cache/cache.hpp, CacheException will be thrown if anything goes wrong with a Cache or its child class' object; This exception is rare but does exists sometimes due to local filesystem failure; we handle these exceptions by restarting the server;
+
+	- in httpparser/httpparser.hpp, HTTPParserException and its children class' objects will be thrown if parser fails to identify an HTTP request or response; most of the time, its due to the incomplete recv(), so we'll retry until recv() receives everything we need or the retry time exceed a limit (say, 100 times), after which we'll thrown an HTTPBadMessageException (see below)
+
+	- in httpparser/httpparser.hpp, HTTPBadMessageException and its children class' objects will be thrown if we're 100% that this is not an HTTPParserException case (e.g. the message is not splitted by "\r\n" but "\n") but an indeed ill-formatted message; we handle these exceptions by ignoring the request / response and close corresponding sockets
+
+	- in main.cpp, we handle all failures concerning sockets, like failed to connect / send / receive; we handle all these faliures by ignoring them and, if a server failed to response, we do our best effort to tell the client so and close all corresponding sockets;
+
+	- if we failed to call daemon(), which is rare, we'll report error to stdout and then exit;
+
+	- the initialization stage after daemon() call are guaranteed no-throw;
+
+	- if anything else failed with standard exceptions, we'll restart the server; unlimited restarting might not be a good idea...
+
+
+* Exception guarantees - Answers to checklist question 7 (7.You should know the exception guarantees you make (Please specify them (within your danger log).)
+
+	- I admitted that I failed to make exception guarantees very clear; the reason why is that if I want to know a specific exception guarantee of a function, I need to know every callee's exception guarantee, which then needs all its callee's infomation; Doing this requires reviewing the whole code once more, which is not possible since the due is close XD; I should have make exception guarantees of every functino clear at the very beginning;
+
