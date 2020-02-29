@@ -59,15 +59,15 @@ done
 
 
 printf "\n${GREEN}9. Expire Example${NC}\n\n"
-printf "First build a fake response for request 1 (see above) with max-age=0
-you can check this in src/testCases/response_1.txt
-copy this to our cache 'cp ./testCases/response_1.txt ./__cache__/response_1'
-then redo request 1
+printf "First build a fake response for request 2 (see above) with max-age=0
+you can check this in src/testCases/response_2.txt
+copy this to our cache 'cp ./testCases/response_1.txt ./__cache__/response_2'
+then redo request 2
 WARNING: this test may fail because we're testing in a tricky way that relies on
- the id of a request, which is not guaranteed to be 1"
-cp ./testCases/response_1.txt ./__cache__/response_1
+ the id of a request, which is not guaranteed to be 2"
+cp ./testCases/response_2.txt ./__cache__/response_2
 sleep 1
-timeout 5 nc localhost 1234 < testCases/request1.txt > /dev/null 2>&1
+timeout 5 nc localhost 1234 < testCases/request2.txt > /dev/null 2>&1
 
 # ------------------------------------- END TEST CASES ---------------------------------------
 
