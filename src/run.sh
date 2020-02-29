@@ -42,8 +42,8 @@ echo ''
 
 
 # ------------------------------------- WRITE TEST CASES HERE --------------------------------
-declare -a titles=("Trival GET" "First GET" "Second GET, request the same as testcase 2" "Trival POST" "ill-formatted GET" "ill-formatted POST" "GET a 404" "Re-validation")
-declare -a exps=("get and cache" "get and cache" "be able to find response in cache" "do the work and not cache" "report warning and continue" "report warning and continue" "get and do not cache" "do re-validation")
+declare -a titles=("Trival GET" "First GET" "Second GET, request the same as testcase 2" "Trival POST" "ill-formatted GET" "ill-formatted POST" "GET a 404")
+declare -a exps=("get and cache" "get and cache" "be able to find response in cache" "do the work and not cache" "report warning and continue" "report warning and continue" "get and do not cache")
 nCases=${#titles[@]}
 
 for (( i=1; i<${nCases}+1; i++ ));
@@ -58,14 +58,14 @@ done
 
 
 
-printf "\n${GREEN}9. Expire Example${NC}\n\n"
-printf "First build a fake response for request 2 (see above) with max-age=0
-you can check this in src/testCases/response_2.txt
-copy this to our cache 'cp ./testCases/response_1.txt ./__cache__/response_2'
-then redo request 2
+printf "\n${GREEN}8. Expire Example${NC}\n\n"
+printf "First build a fake response for request with id 10 (see above) with max-age=0
+you can check this in src/testCases/response_10.txt
+copy this to our cache 'cp ./testCases/response_10.txt ./__cache__/response_10'
+then redo request 10
 WARNING: this test may fail because we're testing in a tricky way that relies on
- the id of a request, which is not guaranteed to be 2"
-cp ./testCases/response_2.txt ./__cache__/response_2
+ the id of a request, which is not guaranteed to be 10\n\n"
+cp ./testCases/response_10.txt ./__cache__/response_10
 sleep 1
 timeout 5 nc localhost 1234 < testCases/request2.txt > /dev/null 2>&1
 
